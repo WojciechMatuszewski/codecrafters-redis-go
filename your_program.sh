@@ -8,6 +8,8 @@
 
 set -e # Exit early if any commands fail
 
+lsof -ti:6379 | xargs kill -9 2>/dev/null || true
+
 # Copied from .codecrafters/compile.sh
 #
 # - Edit this to change how your program compiles locally
