@@ -33,7 +33,6 @@ func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	for {
-
 		buf := make([]byte, 1024)
 		read, err := conn.Read(buf)
 		if err != nil {
