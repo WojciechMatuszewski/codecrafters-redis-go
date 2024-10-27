@@ -1,6 +1,8 @@
 package main
 
 import (
+	"errors"
+	"io"
 	"net"
 )
 
@@ -17,16 +19,24 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	defer conn.Close()
 
-	buf := make([]byte, 1024)
-	_, err = net.Conn.Read(conn, buf)
-	if err != nil {
-		panic(err)
+	for {
+		buf := make([]byte, 1024)
+		_, err = net.Conn.Read(conn, buf)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return
+			}
+
+			panic(err)
+		}
+
+		pong := []byte("+PONG\r\n")
+		_, err = net.Conn.Write(conn, pong)
+		if err != nil {
+			panic(err)
+		}
 	}
 
-	pong := []byte("+PONG\r\n")
-	_, err = net.Conn.Write(conn, pong)
-	if err != nil {
-		panic(err)
-	}
 }
