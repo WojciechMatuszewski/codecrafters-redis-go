@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net"
 )
@@ -21,6 +22,8 @@ func main() {
 			panic(err)
 		}
 
+		fmt.Println("New connection:", conn.RemoteAddr())
+
 		go handleConnection(conn)
 	}
 
@@ -38,6 +41,10 @@ func handleConnection(conn net.Conn) {
 
 		panic(err)
 	}
+
+	fmt.Println("--- Received ---")
+	fmt.Println(string(buf))
+	fmt.Println("---")
 
 	pong := []byte("+PONG\r\n")
 	_, err = net.Conn.Write(conn, pong)
