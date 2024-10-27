@@ -51,7 +51,7 @@ func handleConnection(conn net.Conn) {
 		fmt.Println(string(command))
 		fmt.Println("---")
 
-		_, err = writer.WriteString("+Pong\r\n")
+		_, err = writer.WriteString("+PONG\r\n")
 		if err != nil {
 			log.Printf("Error writing to %s: %v", conn.RemoteAddr(), err)
 			return
