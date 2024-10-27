@@ -15,28 +15,33 @@ func main() {
 		panic(err)
 	}
 
-	conn, err := l.Accept()
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			panic(err)
+		}
+
+		go handleConnection(conn)
+	}
+
+}
+
+func handleConnection(conn net.Conn) {
+	defer conn.Close()
+
+	buf := make([]byte, 1024)
+	_, err := net.Conn.Read(conn, buf)
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			return
+		}
+
+		panic(err)
+	}
+
+	pong := []byte("+PONG\r\n")
+	_, err = net.Conn.Write(conn, pong)
 	if err != nil {
 		panic(err)
 	}
-	defer conn.Close()
-
-	for {
-		buf := make([]byte, 1024)
-		_, err = net.Conn.Read(conn, buf)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return
-			}
-
-			panic(err)
-		}
-
-		pong := []byte("+PONG\r\n")
-		_, err = net.Conn.Write(conn, pong)
-		if err != nil {
-			panic(err)
-		}
-	}
-
 }
