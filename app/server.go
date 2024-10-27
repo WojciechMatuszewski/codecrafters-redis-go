@@ -35,7 +35,6 @@ func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	reader := bufio.NewReader(conn)
-	writer := bufio.NewWriter(conn)
 
 	for {
 		command, err := reader.ReadString('\n')
@@ -51,12 +50,10 @@ func handleConnection(conn net.Conn) {
 		fmt.Println(string(command))
 		fmt.Println("---")
 
-		_, err = writer.WriteString("+PONG\r\n")
+		_, err = conn.Write([]byte("+PONG\r\n"))
 		if err != nil {
 			log.Printf("Error writing to %s: %v", conn.RemoteAddr(), err)
 			return
 		}
-
-		writer.Flush()
 	}
 }
