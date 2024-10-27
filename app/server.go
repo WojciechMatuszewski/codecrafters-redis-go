@@ -34,9 +34,8 @@ func main() {
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	reader := bufio.NewReader(conn)
-
 	for {
+		reader := bufio.NewReader(conn)
 		command, err := reader.ReadString('\n')
 		if err != nil {
 			if errors.Is(err, io.EOF) {
