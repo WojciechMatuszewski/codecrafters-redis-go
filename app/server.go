@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 )
 
@@ -32,25 +34,29 @@ func main() {
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
+	reader := bufio.NewReader(conn)
+	writer := bufio.NewWriter(conn)
+
 	for {
-		buf := make([]byte, 1024)
-		read, err := conn.Read(buf)
+		command, err := reader.ReadString('\n')
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return
 			}
 
-			panic(err)
+			log.Fatalf("Error reading from %s: %v", conn.RemoteAddr(), err)
 		}
 
 		fmt.Println("--- Received ---")
-		fmt.Println(string(buf[:read]))
+		fmt.Println(string(command))
 		fmt.Println("---")
 
-		pong := []byte("+PONG\r\n")
-		_, err = conn.Write(pong)
+		_, err = writer.WriteString("+Pong\r\n")
 		if err != nil {
-			panic(err)
+			log.Printf("Error writing to %s: %v", conn.RemoteAddr(), err)
+			return
 		}
+
+		writer.Flush()
 	}
 }
