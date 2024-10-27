@@ -32,23 +32,26 @@ func main() {
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	buf := make([]byte, 1024)
-	read, err := conn.Read(buf)
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			return
+	for {
+
+		buf := make([]byte, 1024)
+		read, err := conn.Read(buf)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return
+			}
+
+			panic(err)
 		}
 
-		panic(err)
-	}
+		fmt.Println("--- Received ---")
+		fmt.Println(string(buf[:read]))
+		fmt.Println("---")
 
-	fmt.Println("--- Received ---")
-	fmt.Println(string(buf[:read]))
-	fmt.Println("---")
-
-	pong := []byte("+PONG\r\n")
-	_, err = conn.Write(pong)
-	if err != nil {
-		panic(err)
+		pong := []byte("+PONG\r\n")
+		_, err = conn.Write(pong)
+		if err != nil {
+			panic(err)
+		}
 	}
 }
