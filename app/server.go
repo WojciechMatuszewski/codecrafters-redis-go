@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -35,8 +34,8 @@ func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	for {
-		reader := bufio.NewReader(conn)
-		command, err := reader.ReadString('\n')
+		buf := make([]byte, 1024)
+		n, err := conn.Read(buf)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return
@@ -45,14 +44,29 @@ func handleConnection(conn net.Conn) {
 			log.Fatalf("Error reading from %s: %v", conn.RemoteAddr(), err)
 		}
 
+		command := Parse(buf[:n])
+		switch command.Type {
+		case Ping:
+			_, err = conn.Write([]byte("+PONG\r\n"))
+			if err != nil {
+				log.Printf("Error writing to %s: %v", conn.RemoteAddr(), err)
+				return
+			}
+		case Echo:
+			arg := command.Args[0]
+			output := fmt.Sprintf("$%d\r\n%s\r\n", len(arg), arg)
+			fmt.Println(output)
+
+			_, err = conn.Write([]byte(output))
+			if err != nil {
+				log.Printf("Error writing to %s: %v", conn.RemoteAddr(), err)
+				return
+			}
+		}
+
 		fmt.Println("--- Received ---")
-		fmt.Println(string(command))
+		fmt.Println(string(buf[:n]))
 		fmt.Println("---")
 
-		_, err = conn.Write([]byte("+PONG\r\n"))
-		if err != nil {
-			log.Printf("Error writing to %s: %v", conn.RemoteAddr(), err)
-			return
-		}
 	}
 }
