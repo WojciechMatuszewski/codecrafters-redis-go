@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"log"
 	"strconv"
 	"strings"
@@ -13,6 +14,8 @@ type Type string
 const (
 	Echo = "echo"
 	Ping = "ping"
+	Set  = "set"
+	Get  = "get"
 )
 
 type Command struct {
@@ -39,19 +42,12 @@ func Parse(buf []byte) Command {
 		log.Fatalln("Could not read the size of the array", err)
 	}
 
-	// Command type length
-	_, err = reader.ReadBytes('\n')
+	cmdType, err := readNext(reader)
 	if err != nil {
 		log.Fatalln("Could not read line", err)
 	}
+	cmdType = strings.ToLower(cmdType)
 
-	// Command type
-	rawCmdType, err := reader.ReadBytes('\n')
-	if err != nil {
-		log.Fatalln("Could not read line", err)
-	}
-
-	cmdType := strings.ToLower(strings.TrimSpace(string(rawCmdType)))
 	switch cmdType {
 	case Ping:
 		return Command{
@@ -59,20 +55,39 @@ func Parse(buf []byte) Command {
 			Args: []string{},
 		}
 	case Echo:
-		_, err := reader.ReadBytes('\n')
+		arg, err := readNext(reader)
 		if err != nil {
 			log.Fatalln("Failed to read args for echo", err)
 		}
 
-		rawArg, err := reader.ReadBytes('\n')
-		if err != nil {
-			log.Fatalln("Failed to read args for echo", err)
-		}
-
-		arg := strings.TrimSpace(string(rawArg))
 		return Command{
 			Type: Echo,
 			Args: []string{arg},
+		}
+	case Set:
+		key, err := readNext(reader)
+		if err != nil {
+			log.Fatalln("Failed to read args for set", err)
+		}
+
+		value, err := readNext(reader)
+		if err != nil {
+			log.Fatalln("Failed to read args for set", err)
+		}
+
+		return Command{
+			Type: Set,
+			Args: []string{key, value},
+		}
+	case Get:
+		key, err := readNext(reader)
+		if err != nil {
+			log.Fatalln("Failed to read args for set", err)
+		}
+
+		return Command{
+			Type: Get,
+			Args: []string{key},
 		}
 
 	default:
@@ -80,4 +95,23 @@ func Parse(buf []byte) Command {
 	}
 
 	return cmd
+}
+
+func readNext(reader *bufio.Reader) (string, error) {
+	rawNextType, err := reader.ReadBytes('\n')
+	if err != nil {
+		return "", fmt.Errorf("failed to read next: %v", err)
+	}
+	nextType := strings.TrimSpace(string(rawNextType[0]))
+	if nextType != "$" {
+		return "", fmt.Errorf("unknown data type: %v", string(rawNextType))
+	}
+
+	rawNext, err := reader.ReadBytes('\n')
+	if err != nil {
+		return "", fmt.Errorf("failed to read next: %v", err)
+	}
+
+	next := strings.TrimSpace(string(rawNext))
+	return next, nil
 }

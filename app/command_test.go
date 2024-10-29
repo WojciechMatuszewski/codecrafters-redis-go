@@ -17,7 +17,15 @@ func TestCommand(t *testing.T) {
 		},
 		"ECHO - ignores all but the first argument": {
 			input:  []byte(string("*3\r\n$4\r\nECHO\r\n$5\r\nhello\r\n$5\r\nworld\n")),
-			output: Command{Type: Echo, Args: []string{("hello")}},
+			output: Command{Type: Echo, Args: []string{"hello"}},
+		},
+		"SET": {
+			input:  []byte(string("*3\r\n$3\r\nSET\r\n$5\r\nhello\r\n$5\r\nworld\n")),
+			output: Command{Type: Set, Args: []string{"hello", "world"}},
+		},
+		"GET": {
+			input:  []byte(string("*3\r\n$3\r\nGET\r\n$5\r\nhello\n")),
+			output: Command{Type: Get, Args: []string{"hello"}},
 		},
 	}
 
