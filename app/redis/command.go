@@ -1,4 +1,4 @@
-package main
+package redis
 
 import (
 	"bufio"
@@ -9,26 +9,26 @@ import (
 	"strings"
 )
 
-type Type string
+type CmdType string
 
 const (
-	Echo = "echo"
-	Ping = "ping"
-	Set  = "set"
-	Get  = "get"
+	Echo CmdType = "echo"
+	Ping CmdType = "ping"
+	Set  CmdType = "set"
+	Get  CmdType = "get"
 )
 
-type Command struct {
-	Type Type
+type Cmd struct {
+	Type CmdType
 	Args []string
 }
 
-func Parse(buf []byte) Command {
+func ParseCommand(buf []byte) Cmd {
 	if len(buf) == 0 {
 		log.Fatalf("Malformed input data: empty buffer")
 	}
 
-	var cmd = Command{}
+	var cmd = Cmd{}
 	reader := bufio.NewReader(bytes.NewReader(buf))
 
 	// Array
@@ -42,50 +42,50 @@ func Parse(buf []byte) Command {
 		log.Fatalln("Could not read the size of the array", err)
 	}
 
-	cmdType, err := readNext(reader)
+	cmdType, err := next(reader)
 	if err != nil {
 		log.Fatalln("Could not read line", err)
 	}
 	cmdType = strings.ToLower(cmdType)
 
-	switch cmdType {
+	switch CmdType(cmdType) {
 	case Ping:
-		return Command{
+		return Cmd{
 			Type: Ping,
 			Args: []string{},
 		}
 	case Echo:
-		arg, err := readNext(reader)
+		arg, err := next(reader)
 		if err != nil {
 			log.Fatalln("Failed to read args for echo", err)
 		}
 
-		return Command{
+		return Cmd{
 			Type: Echo,
 			Args: []string{arg},
 		}
 	case Set:
-		key, err := readNext(reader)
+		key, err := next(reader)
 		if err != nil {
 			log.Fatalln("Failed to read args for set", err)
 		}
 
-		value, err := readNext(reader)
+		value, err := next(reader)
 		if err != nil {
 			log.Fatalln("Failed to read args for set", err)
 		}
 
-		return Command{
+		return Cmd{
 			Type: Set,
 			Args: []string{key, value},
 		}
 	case Get:
-		key, err := readNext(reader)
+		key, err := next(reader)
 		if err != nil {
 			log.Fatalln("Failed to read args for set", err)
 		}
 
-		return Command{
+		return Cmd{
 			Type: Get,
 			Args: []string{key},
 		}
@@ -97,7 +97,7 @@ func Parse(buf []byte) Command {
 	return cmd
 }
 
-func readNext(reader *bufio.Reader) (string, error) {
+func next(reader *bufio.Reader) (string, error) {
 	rawNextType, err := reader.ReadBytes('\n')
 	if err != nil {
 		return "", fmt.Errorf("failed to read next: %v", err)
