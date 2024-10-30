@@ -36,6 +36,8 @@ func (s *Server) ListenAndServe(handler HandlerFunc) error {
 }
 
 func handleConnection(handler HandlerFunc, conn net.Conn) {
+	// TODO: Read
+	// https://trstringer.com/golang-deferred-function-error-handling/
 	defer conn.Close()
 	handler(conn)
 }
