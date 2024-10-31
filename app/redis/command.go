@@ -106,6 +106,8 @@ func ParseCommand(buf []byte) Cmd {
 			log.Fatalln("Failed to read args for set", err)
 		}
 
+		fmt.Println("GET command for key", key)
+
 		return Cmd{
 			Type: Get,
 			Args: []string{key},
