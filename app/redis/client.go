@@ -33,6 +33,8 @@ func (c *Client) Handle(rw io.ReadWriter) {
 
 	command := ParseCommand(input)
 
+	fmt.Println("Parsed command type", command.Type)
+
 	switch command.Type {
 	case Ping:
 		err := WriteSimpleString(rw, "PONG")
