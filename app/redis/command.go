@@ -3,7 +3,9 @@ package redis
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"strconv"
 	"strings"
@@ -74,11 +76,30 @@ func ParseCommand(buf []byte) Cmd {
 		if err != nil {
 			log.Fatalln("Failed to read args for set", err)
 		}
+		args := []string{key, value}
 
+		modifier, err := next(reader)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return Cmd{Type: Set, Args: args}
+			}
+
+			log.Fatalln("Failed to read args for set", err)
+		}
+
+		if modifier != "px" {
+			log.Fatalln("Unknown SET modifier", modifier)
+		}
+
+		expiry, err := next(reader)
+		if err != nil {
+			log.Fatalln("Failed to read the expiry time for SET: %w", err)
+		}
 		return Cmd{
 			Type: Set,
-			Args: []string{key, value},
+			Args: append(args, expiry),
 		}
+
 	case Get:
 		key, err := next(reader)
 		if err != nil {
@@ -97,11 +118,29 @@ func ParseCommand(buf []byte) Cmd {
 	return cmd
 }
 
+func WriteBulkString(w io.Writer, input string) error {
+	output := fmt.Sprintf("$%d\r\n%s\r\n", len(input), input)
+	_, err := w.Write([]byte(output))
+	return err
+}
+
+func WriteSimpleString(w io.Writer, input string) error {
+	output := fmt.Sprintf("+%s\r\n", input)
+	_, err := w.Write([]byte(output))
+	return err
+}
+
+func WriteNullBulkString(w io.Writer) error {
+	_, err := w.Write([]byte("$-1\r\n"))
+	return err
+}
+
 func next(reader *bufio.Reader) (string, error) {
 	rawNextType, err := reader.ReadBytes('\n')
 	if err != nil {
-		return "", fmt.Errorf("failed to read next: %v", err)
+		return "", fmt.Errorf("failed to read next: %w", err)
 	}
+
 	nextType := strings.TrimSpace(string(rawNextType[0]))
 	if nextType != "$" {
 		return "", fmt.Errorf("unknown data type: %v", string(rawNextType))
@@ -109,7 +148,7 @@ func next(reader *bufio.Reader) (string, error) {
 
 	rawNext, err := reader.ReadBytes('\n')
 	if err != nil {
-		return "", fmt.Errorf("failed to read next: %v", err)
+		return "", fmt.Errorf("failed to read next: %w", err)
 	}
 
 	next := strings.TrimSpace(string(rawNext))

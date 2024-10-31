@@ -2,9 +2,9 @@ package redis
 
 import (
 	"errors"
-	"fmt"
 	"io"
 	"log"
+	"strconv"
 )
 
 type Client struct {
@@ -31,16 +31,14 @@ func (c *Client) Handle(rw io.ReadWriter) {
 
 	switch command.Type {
 	case Ping:
-		_, err := rw.Write([]byte("+PONG\r\n"))
+		err := WriteSimpleString(rw, "PONG")
 		if err != nil {
 			log.Printf("Error handling %s command: %v", command.Type, err)
 			return
 		}
 	case Echo:
 		arg := command.Args[0]
-		output := fmt.Sprintf("$%d\r\n%s\r\n", len(arg), arg)
-
-		_, err = rw.Write([]byte(output))
+		err := WriteBulkString(rw, arg)
 		if err != nil {
 			log.Printf("Error handling %s command: %v", command.Type, err)
 			return
@@ -49,9 +47,20 @@ func (c *Client) Handle(rw io.ReadWriter) {
 		key := command.Args[0]
 		value := command.Args[1]
 
-		c.store.Set(key, value)
+		var expiry *int
+		if len(command.Args) > 2 {
+			rawExpiryMs := command.Args[2]
+			expiryMs, err := strconv.Atoi(rawExpiryMs)
+			if err != nil {
+				log.Fatalln("Could not convert the expiry time to integer: %w", err)
+			}
 
-		_, err = rw.Write([]byte("+OK\r\n"))
+			expiry = &expiryMs
+		}
+
+		c.store.Set(key, value, expiry)
+
+		err := WriteSimpleString(rw, "OK")
 		if err != nil {
 			log.Printf("Error handling %s command: %v", command.Type, err)
 			return
@@ -62,7 +71,7 @@ func (c *Client) Handle(rw io.ReadWriter) {
 		value, found := c.store.Get(key)
 
 		if !found {
-			_, err = rw.Write([]byte("$-1\r\n")) // Redis nil response
+			err := WriteNullBulkString(rw)
 			if err != nil {
 				log.Printf("Error handling %s command: %v", command.Type, err)
 				return
@@ -71,8 +80,7 @@ func (c *Client) Handle(rw io.ReadWriter) {
 			return
 		}
 
-		output := fmt.Sprintf("$%d\r\n%s\r\n", len(value), value)
-		_, err = rw.Write([]byte(output))
+		err := WriteBulkString(rw, value)
 		if err != nil {
 			log.Printf("Error handling %s command: %v", command.Type, err)
 			return

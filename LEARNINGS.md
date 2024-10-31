@@ -15,3 +15,7 @@
   - The is the `RWMutex` which **will lock both readers and writers when writing, but allows access by multiple readers**.
 
   - Depending on your use-case, for example in situations where there are a lot of reads, it might be worth using `RWMutex` over the `Mutex`.
+
+- Use the `%q` _format verb_ to display all whitespace encoded as characters.
+
+  - Very useful for looking how the Redis input command is structured!

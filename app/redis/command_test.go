@@ -24,6 +24,10 @@ func TestCommand(t *testing.T) {
 			input:  []byte(string("*3\r\n$3\r\nSET\r\n$5\r\nhello\r\n$5\r\nworld\n")),
 			output: redis.Cmd{Type: redis.Set, Args: []string{"hello", "world"}},
 		},
+		"SET with expiry": {
+			input:  []byte(string("*5\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\nbar\r\n$2\r\npx\r\n$3\r\n100\r\n")),
+			output: redis.Cmd{Type: redis.Set, Args: []string{"foo", "bar", "100"}},
+		},
 		"GET": {
 			input:  []byte(string("*3\r\n$3\r\nGET\r\n$5\r\nhello\n")),
 			output: redis.Cmd{Type: redis.Get, Args: []string{"hello"}},
