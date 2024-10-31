@@ -29,7 +29,7 @@ func (c *Client) Handle(rw io.ReadWriter) {
 
 	input := buf[:n]
 
-	fmt.Println("received input", input)
+	fmt.Println("received input", string(input))
 
 	command := ParseCommand(input)
 
