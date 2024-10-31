@@ -77,7 +77,11 @@ func (c *Client) Handle(rw io.ReadWriter) {
 				return
 			}
 
-			return
+			err = WriteNullBulkString(rw)
+			if err != nil {
+				log.Printf("Error writing a not found response for GET: %v", err)
+				return
+			}
 		}
 
 		err := WriteBulkString(rw, value)
