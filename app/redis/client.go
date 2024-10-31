@@ -2,6 +2,7 @@ package redis
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"strconv"
@@ -27,6 +28,9 @@ func (c *Client) Handle(rw io.ReadWriter) {
 	}
 
 	input := buf[:n]
+
+	fmt.Println("received input", input)
+
 	command := ParseCommand(input)
 
 	switch command.Type {
