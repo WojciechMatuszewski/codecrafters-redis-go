@@ -19,3 +19,9 @@
 - Use the `%q` _format verb_ to display all whitespace encoded as characters.
 
   - Very useful for looking how the Redis input command is structured!
+
+- **Shutting down the server gracefully is, to me, surprisingly challenging**.
+
+  - A lot of calls are blocking, but the fact that they are, is never documented anywhere?
+
+    - The flip side is that you write the async code as if it was synchronous.

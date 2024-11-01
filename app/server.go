@@ -13,9 +13,9 @@ var state = map[string]string{}
 
 func main() {
 	server := tcp.NewServer(address)
-	redisClient := redis.NewClient()
+	client := redis.NewClient()
 
 	server.ListenAndServe(func(conn net.Conn) {
-		redisClient.Handle(conn)
+		client.Handle(conn)
 	})
 }
