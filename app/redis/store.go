@@ -16,14 +16,30 @@ type storeItem struct {
 	expiresAt *time.Time
 }
 
+type Nower func() time.Time
+
 type InMemoryStore struct {
-	data map[string]storeItem
-	mu   sync.RWMutex
+	data  map[string]storeItem
+	mu    sync.RWMutex
+	nower Nower
 }
 
-func NewInMemoryStore() Store {
-	return &InMemoryStore{
-		data: map[string]storeItem{},
+func NewInMemoryStore(opts ...func(*InMemoryStore)) Store {
+	store := &InMemoryStore{
+		data:  map[string]storeItem{},
+		nower: time.Now,
+	}
+
+	for _, opt := range opts {
+		opt(store)
+	}
+
+	return store
+}
+
+func WithNower(nower Nower) func(*InMemoryStore) {
+	return func(s *InMemoryStore) {
+		s.nower = nower
 	}
 }
 
@@ -34,7 +50,7 @@ func (s *InMemoryStore) Set(key string, value string, expiryMs *int) {
 	item := storeItem{}
 
 	if expiryMs != nil {
-		now := time.Now()
+		now := s.nower()
 		expiresAt := now.Add(time.Duration(*expiryMs) * time.Millisecond)
 		item.expiresAt = &expiresAt
 	}
@@ -55,7 +71,7 @@ func (s *InMemoryStore) Get(key string) (string, bool) {
 		return item.value, found
 	}
 
-	now := time.Now()
+	now := s.nower()
 	if now.After(*item.expiresAt) {
 		return "", false
 	}

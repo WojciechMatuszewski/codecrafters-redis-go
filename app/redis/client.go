@@ -12,8 +12,8 @@ type Client struct {
 	store Store
 }
 
-func NewClient() *Client {
-	return &Client{store: NewInMemoryStore()}
+func NewClient(store Store) *Client {
+	return &Client{store: store}
 }
 
 func (c *Client) Handle(rw io.ReadWriter) {
@@ -29,11 +29,11 @@ func (c *Client) Handle(rw io.ReadWriter) {
 
 	input := buf[:n]
 
-	fmt.Printf("received input %q \n", string(input))
+	fmt.Printf("Received input: %q\n", string(input))
 
 	command := ParseCommand(input)
 
-	fmt.Println("Parsed command type", command.Type)
+	fmt.Printf("Executing command: %v\n", command.Type)
 
 	switch command.Type {
 	case Ping:

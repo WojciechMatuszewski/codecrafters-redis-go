@@ -1,4 +1,4 @@
-package tcp
+package redis
 
 import (
 	"context"
@@ -14,35 +14,35 @@ const (
 
 type Server struct {
 	address string
+	client  *Client
 }
 
 func NewServer(address string) *Server {
-	return &Server{address: address}
+	client := NewClient(NewInMemoryStore())
+	return &Server{address: address, client: client}
 }
 
-type ConnHandler func(conn net.Conn)
-
-func (s *Server) ListenAndServe(handler ConnHandler) error {
+func (s *Server) ListenAndServe() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	lc := net.ListenConfig{}
-	l, err := lc.Listen(ctx, protocol, s.address)
+	listenConfig := net.ListenConfig{}
+	listener, err := listenConfig.Listen(ctx, protocol, s.address)
 	if err != nil {
 		return fmt.Errorf("failed to listen to %s connections on %s", protocol, s.address)
 	}
-	defer l.Close()
+	defer listener.Close()
 
-	go handleListener(ctx, l, handler)
+	go listenLoop(ctx, listener, s.client)
 
 	<-ctx.Done()
 
-	fmt.Println("Shutting down")
+	fmt.Println("Shutting the server down")
 
 	return nil
 }
 
-func handleListener(ctx context.Context, listener net.Listener, handler ConnHandler) {
+func listenLoop(ctx context.Context, listener net.Listener, client *Client) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -70,19 +70,10 @@ func handleListener(ctx context.Context, listener net.Listener, handler ConnHand
 						fmt.Println("Context is done!")
 						return
 					default:
-						handler(conn)
+						client.Handle(conn)
 					}
 				}
 			}()
 		}
-	}
-}
-
-func handleConnection(handler ConnHandler, conn net.Conn) {
-	// TODO: Read
-	// https://trstringer.com/golang-deferred-function-error-handling/
-	defer conn.Close()
-	for {
-		handler(conn)
 	}
 }
