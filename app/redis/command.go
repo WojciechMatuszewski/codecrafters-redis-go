@@ -121,21 +121,23 @@ func ParseCommand(buf []byte) Cmd {
 }
 
 func WriteBulkString(w io.Writer, input string) error {
-	output := fmt.Sprintf("$%d\r\n%s\r\n", len(input), input)
+	output := BulkString(input)
 	fmt.Println("Responding with", output)
 	_, err := w.Write([]byte(output))
 	return err
 }
 
 func WriteSimpleString(w io.Writer, input string) error {
-	output := fmt.Sprintf("+%s\r\n", input)
+	output := SimpleString(input)
 	fmt.Println("Responding with", output)
 	_, err := w.Write([]byte(output))
 	return err
 }
 
 func WriteNullBulkString(w io.Writer) error {
-	_, err := w.Write([]byte("$-1\r\n"))
+	output := NullBulkString()
+	fmt.Println("Responding with", output)
+	_, err := w.Write([]byte(output))
 	fmt.Println("Responding with null bulk")
 	return err
 }

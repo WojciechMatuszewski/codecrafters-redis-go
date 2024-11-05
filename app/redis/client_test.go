@@ -17,12 +17,16 @@ func TestClient(t *testing.T) {
 		output []byte
 	}{
 		"PING": {
-			input:  []byte("*1\r\n$4\r\nPING\n"),
-			output: []byte("+PONG\r\n"),
+			input:  []byte(redis.Array(redis.BulkString("PING"))),
+			output: []byte(redis.SimpleString("PONG")),
 		},
 		"ECHO - ignores all but the first argument": {
-			input:  []byte("*3\r\n$4\r\nECHO\r\n$5\r\nhello\r\n$5\r\nworld\n"),
-			output: []byte("$5\r\nhello\r\n"),
+			input: []byte(redis.Array(
+				redis.BulkString("ECHO"),
+				redis.BulkString("hello"),
+				redis.BulkString("world"),
+			)),
+			output: []byte(redis.BulkString("hello")),
 		},
 	}
 
@@ -48,20 +52,27 @@ func TestClient(t *testing.T) {
 		key := "hello"
 		value := "world"
 
-		buf.Write([]byte(fmt.Sprintf("*3\r\n$3\r\nSET\r\n$%v\r\n%s\r\n$%v\r\n%s\n", len(key), key, len(value), value)))
+		buf.Write([]byte(redis.Array(
+			redis.BulkString("SET"),
+			redis.BulkString(key),
+			redis.BulkString(value),
+		)))
 		client.Handle(buf)
 		{
 			read, err := io.ReadAll(buf)
 			assert.NoError(t, err)
-			assert.Equal(t, []byte(string("+OK\r\n")), read)
+			assert.Equal(t, []byte(redis.SimpleString("OK")), read)
 		}
 
-		buf.Write([]byte([]byte(fmt.Sprintf("*3\r\n$3\r\nGET\r\n$%v\r\n%s\n", len(key), key))))
+		buf.Write([]byte(redis.Array(
+			redis.BulkString("GET"),
+			redis.BulkString(key),
+		)))
 		client.Handle(buf)
 		{
 			read, err := io.ReadAll(buf)
 			assert.NoError(t, err)
-			assert.Equal(t, []byte(fmt.Sprintf("$%v\r\n%s\r\n", len(value), value)), read)
+			assert.Equal(t, []byte(redis.BulkString(value)), read)
 		}
 	})
 
@@ -102,36 +113,51 @@ func TestClient(t *testing.T) {
 		key := "hello"
 		value := "world"
 
-		buf.Write([]byte(fmt.Sprintf("*5\r\n$3\r\nset\r\n$%v\r\n%s\r\n$%v\r\n%s\r\n$2\r\npx\r\n$%v\r\n%v\r\n", len(key), key, len(value), value, len(fmt.Sprintf("%v", expiryMs)), expiryMs)))
+		buf.Write([]byte(redis.Array(
+			redis.BulkString("SET"),
+			redis.BulkString(key),
+			redis.BulkString(value),
+			redis.BulkString("px"),
+			redis.BulkString(fmt.Sprintf("%v", expiryMs)),
+		)))
 		client.Handle(buf)
 		{
 			read, err := io.ReadAll(buf)
 			assert.NoError(t, err)
-			assert.Equal(t, []byte(string("+OK\r\n")), read)
+			assert.Equal(t, []byte(redis.SimpleString("OK")), read)
 		}
 
-		buf.Write([]byte([]byte(fmt.Sprintf("*3\r\n$3\r\nGET\r\n$%v\r\n%s\n", len(key), key))))
+		buf.Write([]byte(redis.Array(
+			redis.BulkString("GET"),
+			redis.BulkString(key),
+		)))
 		client.Handle(buf)
 		{
 			read, err := io.ReadAll(buf)
 			assert.NoError(t, err)
-			assert.Equal(t, []byte(fmt.Sprintf("$%v\r\n%s\r\n", len(value), value)), read)
+			assert.Equal(t, []byte(redis.BulkString(value)), read)
 		}
 
-		buf.Write([]byte([]byte(fmt.Sprintf("*3\r\n$3\r\nGET\r\n$%v\r\n%s\n", len(key), key))))
+		buf.Write([]byte(redis.Array(
+			redis.BulkString("GET"),
+			redis.BulkString(key),
+		)))
 		client.Handle(buf)
 		{
 			read, err := io.ReadAll(buf)
 			assert.NoError(t, err)
-			assert.Equal(t, []byte("$-1\r\n"), read)
+			assert.Equal(t, []byte(redis.NullBulkString()), read)
 		}
 
-		buf.Write([]byte([]byte(fmt.Sprintf("*3\r\n$3\r\nGET\r\n$%v\r\n%s\n", len(key), key))))
+		buf.Write([]byte(redis.Array(
+			redis.BulkString("GET"),
+			redis.BulkString(key),
+		)))
 		client.Handle(buf)
 		{
 			read, err := io.ReadAll(buf)
 			assert.NoError(t, err)
-			assert.Equal(t, []byte("$-1\r\n"), read)
+			assert.Equal(t, []byte(redis.NullBulkString()), read)
 		}
 
 	})
