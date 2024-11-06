@@ -120,7 +120,7 @@ func ParseCommand(buf []byte) Cmd {
 			log.Fatalln("Could not read the CONFIG command sub-command", err)
 		}
 
-		if subCmd != "get" {
+		if strings.ToLower(subCmd) != "get" {
 			log.Fatalln("Unknown CONFIG sub-command", subCmd)
 		}
 
@@ -175,6 +175,8 @@ func next(reader *bufio.Reader) (string, error) {
 		return "", fmt.Errorf("failed to read next: %w", err)
 	}
 
+	fmt.Println("rawNextType", string(rawNextType))
+
 	nextType := strings.TrimSpace(string(rawNextType[0]))
 	if nextType != "$" {
 		return "", fmt.Errorf("unknown data type: %v", string(rawNextType))
@@ -184,6 +186,8 @@ func next(reader *bufio.Reader) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to read next: %w", err)
 	}
+
+	fmt.Println("rawNext", string(rawNext))
 
 	next := strings.TrimSpace(string(rawNext))
 	return next, nil
