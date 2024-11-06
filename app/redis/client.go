@@ -9,11 +9,12 @@ import (
 )
 
 type Client struct {
-	store Store
+	store  Store
+	config *Config
 }
 
-func NewClient(store Store) *Client {
-	return &Client{store: store}
+func NewClient(store Store, config *Config) *Client {
+	return &Client{store: store, config: config}
 }
 
 func (c *Client) Handle(rw io.ReadWriter) {
@@ -91,5 +92,26 @@ func (c *Client) Handle(rw io.ReadWriter) {
 			log.Printf("Error handling %s command: %v", command.Type, err)
 			return
 		}
+
+	case Cfg:
+		cfgKey := command.Args[1]
+
+		var value string
+		if cfgKey == "dir" {
+			value = c.config.dir
+		}
+		if cfgKey == "dbfilename" {
+			value = c.config.filename
+		}
+
+		err := Write(rw, Array(
+			BulkString(cfgKey),
+			BulkString(value),
+		))
+		if err != nil {
+			log.Printf("Error handling %s command: %v", command.Type, err)
+			return
+		}
 	}
+
 }

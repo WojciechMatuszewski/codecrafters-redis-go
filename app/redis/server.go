@@ -17,8 +17,8 @@ type Server struct {
 	client  *Client
 }
 
-func NewServer(address string) *Server {
-	client := NewClient(NewInMemoryStore())
+func NewServer(address string, config *Config) *Server {
+	client := NewClient(NewInMemoryStore(), config)
 	return &Server{address: address, client: client}
 }
 

@@ -32,7 +32,7 @@ func TestClient(t *testing.T) {
 
 	for name, test := range commandTests {
 		t.Run(fmt.Sprintf("Command test: %s \n", name), func(t *testing.T) {
-			client := redis.NewClient(redis.NewInMemoryStore())
+			client := redis.NewClient(redis.NewInMemoryStore(), redis.NewConfig("", ""))
 
 			buf := &bytes.Buffer{}
 			buf.Write(test.input)
@@ -46,7 +46,7 @@ func TestClient(t *testing.T) {
 	}
 
 	t.Run("SET without expiry", func(t *testing.T) {
-		client := redis.NewClient(redis.NewInMemoryStore())
+		client := redis.NewClient(redis.NewInMemoryStore(), redis.NewConfig("", ""))
 		buf := &bytes.Buffer{}
 
 		key := "hello"
@@ -107,7 +107,7 @@ func TestClient(t *testing.T) {
 			return newNow
 		}
 
-		client := redis.NewClient(redis.NewInMemoryStore(redis.WithNower(nower)))
+		client := redis.NewClient(redis.NewInMemoryStore(redis.WithNower(nower)), redis.NewConfig("", ""))
 		buf := &bytes.Buffer{}
 
 		key := "hello"

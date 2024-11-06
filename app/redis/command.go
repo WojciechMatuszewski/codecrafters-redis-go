@@ -18,6 +18,7 @@ const (
 	Ping CmdType = "ping"
 	Set  CmdType = "set"
 	Get  CmdType = "get"
+	Cfg  CmdType = "config"
 )
 
 type Cmd struct {
@@ -113,11 +114,37 @@ func ParseCommand(buf []byte) Cmd {
 			Args: []string{key},
 		}
 
+	case Cfg:
+		subCmd, err := next(reader)
+		if err != nil {
+			log.Fatalln("Could not read the CONFIG command sub-command", err)
+		}
+
+		if subCmd != "get" {
+			log.Fatalln("Unknown CONFIG sub-command", subCmd)
+		}
+
+		cfgKey, err := next(reader)
+		if err != nil {
+			log.Fatalln("Could not read CONFIG key", err)
+		}
+
+		return Cmd{
+			Type: Cfg,
+			Args: []string{subCmd, cfgKey},
+		}
+
 	default:
 		log.Fatalln("Unknown command", cmdType)
 	}
 
 	return cmd
+}
+
+func Write(w io.Writer, output string) error {
+	fmt.Println("Responding with", output)
+	_, err := w.Write([]byte(output))
+	return err
 }
 
 func WriteBulkString(w io.Writer, input string) error {
