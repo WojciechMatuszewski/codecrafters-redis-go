@@ -112,6 +112,13 @@ func (c *Client) Handle(rw io.ReadWriter) {
 			log.Printf("Error handling %s command: %v", command.Type, err)
 			return
 		}
+
+	case Info:
+		err := WriteBulkString(rw, "role:master")
+		if err != nil {
+			log.Printf("Error handling %s command: %v", command.Type, err)
+			return
+		}
 	}
 
 }

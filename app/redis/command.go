@@ -19,6 +19,7 @@ const (
 	Set  CmdType = "set"
 	Get  CmdType = "get"
 	Cfg  CmdType = "config"
+	Info CmdType = "info"
 )
 
 type Cmd struct {
@@ -134,6 +135,21 @@ func ParseCommand(buf []byte) Cmd {
 			Args: []string{subCmd, cfgKey},
 		}
 
+	case Info:
+		subCmd, err := next(reader)
+		if err != nil {
+			log.Fatalln("Could not read the CONFIG command sub-command", err)
+		}
+
+		if strings.ToLower(subCmd) != "replication" {
+			log.Fatalln("Unknown CONFIG sub-command", subCmd)
+		}
+
+		return Cmd{
+			Type: Info,
+			Args: []string{subCmd},
+		}
+
 	default:
 		log.Fatalln("Unknown command", cmdType)
 	}
@@ -142,28 +158,31 @@ func ParseCommand(buf []byte) Cmd {
 }
 
 func Write(w io.Writer, output string) error {
-	fmt.Println("Responding with", output)
+	fmt.Println("Responding with\n", output)
 	_, err := w.Write([]byte(output))
 	return err
 }
 
 func WriteBulkString(w io.Writer, input string) error {
 	output := BulkString(input)
-	fmt.Println("Responding with", output)
+	fmt.Println("Responding with\n", output)
+
 	_, err := w.Write([]byte(output))
 	return err
 }
 
 func WriteSimpleString(w io.Writer, input string) error {
 	output := SimpleString(input)
-	fmt.Println("Responding with", output)
+	fmt.Println("Responding with\n", output)
+
 	_, err := w.Write([]byte(output))
 	return err
 }
 
 func WriteNullBulkString(w io.Writer) error {
 	output := NullBulkString()
-	fmt.Println("Responding with", output)
+	fmt.Println("Responding with\n", output)
+
 	_, err := w.Write([]byte(output))
 	fmt.Println("Responding with null bulk")
 	return err
