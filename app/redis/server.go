@@ -12,35 +12,39 @@ const (
 	protocol = "tcp"
 )
 
-type Server struct {
-	host    string
-	port    string
-	address string
-	client  *Client
+type ServerConfig struct {
+	Host    string
+	Port    string
+	Replica string
 }
 
-func NewServer(host string, port string, config *Config) *Server {
-	store := NewInMemoryStore()
-	client := NewClient(store, config)
+func (sc ServerConfig) Address() string {
+	return fmt.Sprintf("%s:%s", sc.Host, sc.Port)
+}
 
-	address := fmt.Sprintf("%s:%s", host, port)
-	return &Server{host: host, port: port, client: client, address: address}
+type Server struct {
+	config ServerConfig
+	client *Client
+}
+
+func NewServer(config ServerConfig, client *Client) *Server {
+	return &Server{config: config, client: client}
 }
 
 func (s *Server) ListenAndServe() error {
-	fmt.Printf("Starting the server on %s:%s\n", s.host, s.port)
+	fmt.Printf("Starting the server on %s\n", s.config.Address())
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	listenConfig := net.ListenConfig{}
-	listener, err := listenConfig.Listen(ctx, protocol, s.address)
+	listener, err := listenConfig.Listen(ctx, protocol, s.config.Address())
 	if err != nil {
-		return fmt.Errorf("failed to listen to %s connections on %s", protocol, s.address)
+		return fmt.Errorf("failed to listen to %s connections on %s", protocol, s.config.Address())
 	}
 	defer listener.Close()
 
-	go listenLoop(ctx, listener, s.client)
+	go s.listenLoop(ctx, listener)
 
 	<-ctx.Done()
 
@@ -49,7 +53,7 @@ func (s *Server) ListenAndServe() error {
 	return nil
 }
 
-func listenLoop(ctx context.Context, listener net.Listener, client *Client) {
+func (s *Server) listenLoop(ctx context.Context, listener net.Listener) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -77,7 +81,11 @@ func listenLoop(ctx context.Context, listener net.Listener, client *Client) {
 						fmt.Println("Context is done!")
 						return
 					default:
-						client.Handle(conn)
+						role := "master"
+						if s.config.Replica != "" {
+							role = "slave"
+						}
+						s.client.Handle(conn, ClientInfo{Role: role})
 					}
 				}
 			}()

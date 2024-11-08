@@ -9,15 +9,18 @@ import (
 )
 
 type Client struct {
-	store  Store
-	config *Config
+	store Store
 }
 
-func NewClient(store Store, config *Config) *Client {
-	return &Client{store: store, config: config}
+func NewClient(store Store) *Client {
+	return &Client{store: store}
 }
 
-func (c *Client) Handle(rw io.ReadWriter) {
+type ClientInfo struct {
+	Role string
+}
+
+func (c *Client) Handle(rw io.ReadWriter, info ClientInfo) {
 	buf := make([]byte, 1024)
 	n, err := rw.Read(buf)
 	if err != nil {
@@ -93,28 +96,8 @@ func (c *Client) Handle(rw io.ReadWriter) {
 			return
 		}
 
-	case Cfg:
-		cfgKey := command.Args[1]
-
-		var value string
-		if cfgKey == "dir" {
-			value = c.config.dir
-		}
-		if cfgKey == "dbfilename" {
-			value = c.config.filename
-		}
-
-		err := Write(rw, Array(
-			BulkString(cfgKey),
-			BulkString(value),
-		))
-		if err != nil {
-			log.Printf("Error handling %s command: %v", command.Type, err)
-			return
-		}
-
 	case Info:
-		err := WriteBulkString(rw, "role:master")
+		err := WriteBulkString(rw, fmt.Sprintf("role:%s", info.Role))
 		if err != nil {
 			log.Printf("Error handling %s command: %v", command.Type, err)
 			return

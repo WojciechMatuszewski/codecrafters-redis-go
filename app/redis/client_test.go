@@ -12,6 +12,8 @@ import (
 )
 
 func TestClient(t *testing.T) {
+	clientInfo := redis.ClientInfo{Role: "master"}
+
 	commandTests := map[string]struct {
 		input  []byte
 		output []byte
@@ -32,12 +34,12 @@ func TestClient(t *testing.T) {
 
 	for name, test := range commandTests {
 		t.Run(fmt.Sprintf("Command test: %s \n", name), func(t *testing.T) {
-			client := redis.NewClient(redis.NewInMemoryStore(), redis.NewConfig("", ""))
+			client := redis.NewClient(redis.NewInMemoryStore())
 
 			buf := &bytes.Buffer{}
 			buf.Write(test.input)
 
-			client.Handle(buf)
+			client.Handle(buf, clientInfo)
 			output, err := io.ReadAll(buf)
 
 			assert.NoError(t, err)
@@ -46,7 +48,7 @@ func TestClient(t *testing.T) {
 	}
 
 	t.Run("SET without expiry", func(t *testing.T) {
-		client := redis.NewClient(redis.NewInMemoryStore(), redis.NewConfig("", ""))
+		client := redis.NewClient(redis.NewInMemoryStore())
 		buf := &bytes.Buffer{}
 
 		key := "hello"
@@ -57,7 +59,7 @@ func TestClient(t *testing.T) {
 			redis.BulkString(key),
 			redis.BulkString(value),
 		)))
-		client.Handle(buf)
+		client.Handle(buf, clientInfo)
 		{
 			read, err := io.ReadAll(buf)
 			assert.NoError(t, err)
@@ -68,7 +70,7 @@ func TestClient(t *testing.T) {
 			redis.BulkString("GET"),
 			redis.BulkString(key),
 		)))
-		client.Handle(buf)
+		client.Handle(buf, clientInfo)
 		{
 			read, err := io.ReadAll(buf)
 			assert.NoError(t, err)
@@ -107,7 +109,7 @@ func TestClient(t *testing.T) {
 			return newNow
 		}
 
-		client := redis.NewClient(redis.NewInMemoryStore(redis.WithNower(nower)), redis.NewConfig("", ""))
+		client := redis.NewClient(redis.NewInMemoryStore(redis.WithNower(nower)))
 		buf := &bytes.Buffer{}
 
 		key := "hello"
@@ -120,7 +122,7 @@ func TestClient(t *testing.T) {
 			redis.BulkString("px"),
 			redis.BulkString(fmt.Sprintf("%v", expiryMs)),
 		)))
-		client.Handle(buf)
+		client.Handle(buf, clientInfo)
 		{
 			read, err := io.ReadAll(buf)
 			assert.NoError(t, err)
@@ -131,7 +133,7 @@ func TestClient(t *testing.T) {
 			redis.BulkString("GET"),
 			redis.BulkString(key),
 		)))
-		client.Handle(buf)
+		client.Handle(buf, clientInfo)
 		{
 			read, err := io.ReadAll(buf)
 			assert.NoError(t, err)
@@ -142,7 +144,7 @@ func TestClient(t *testing.T) {
 			redis.BulkString("GET"),
 			redis.BulkString(key),
 		)))
-		client.Handle(buf)
+		client.Handle(buf, clientInfo)
 		{
 			read, err := io.ReadAll(buf)
 			assert.NoError(t, err)
@@ -153,7 +155,7 @@ func TestClient(t *testing.T) {
 			redis.BulkString("GET"),
 			redis.BulkString(key),
 		)))
-		client.Handle(buf)
+		client.Handle(buf, clientInfo)
 		{
 			read, err := io.ReadAll(buf)
 			assert.NoError(t, err)
