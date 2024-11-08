@@ -25,3 +25,9 @@
   - A lot of calls are blocking, but the fact that they are, is never documented anywhere?
 
     - The flip side is that you write the async code as if it was synchronous.
+
+- The `flag` package is pretty basic.
+
+  - There are some gymnastics involved if you want to ignore unknown flags.
+
+  - You can call the `Parse` on the `FlagSet` only once. Calling it multiple times causes issues.

@@ -1,18 +1,27 @@
 package main
 
 import (
-	"os"
+	"flag"
 
 	"github.com/codecrafters-io/redis-starter-go/app/redis"
 )
 
-const address = "0.0.0.0:6379"
+const (
+	defaultPort = "6379"
+	defaultHost = "0.0.0.0"
+)
 
-var state = map[string]string{}
+var (
+	cfgDir        = flag.String("dir", "", "config directory")
+	cfgDbFilename = flag.String("dbfilename", "", "config dbfilename")
+	port          = flag.String("port", defaultPort, "port of the server")
+)
 
 func main() {
+	flag.Parse()
 
-	config := redis.NewConfigFromArgs(os.Args)
-	server := redis.NewServer(address, config)
+	config := redis.NewConfig(*cfgDir, *cfgDbFilename)
+	server := redis.NewServer(defaultHost, *port, config)
+
 	server.ListenAndServe()
 }

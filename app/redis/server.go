@@ -13,16 +13,23 @@ const (
 )
 
 type Server struct {
+	host    string
+	port    string
 	address string
 	client  *Client
 }
 
-func NewServer(address string, config *Config) *Server {
-	client := NewClient(NewInMemoryStore(), config)
-	return &Server{address: address, client: client}
+func NewServer(host string, port string, config *Config) *Server {
+	store := NewInMemoryStore()
+	client := NewClient(store, config)
+
+	address := fmt.Sprintf("%s:%s", host, port)
+	return &Server{host: host, port: port, client: client, address: address}
 }
 
 func (s *Server) ListenAndServe() error {
+	fmt.Printf("Starting the server on %s:%s\n", s.host, s.port)
+
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 

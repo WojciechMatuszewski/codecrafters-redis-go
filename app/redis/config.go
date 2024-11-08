@@ -1,6 +1,6 @@
 package redis
 
-import "flag"
+import "fmt"
 
 type Config struct {
 	dir      string
@@ -8,19 +8,7 @@ type Config struct {
 }
 
 func NewConfig(dir string, dbfilename string) *Config {
+	fmt.Printf("Created config on dir: %s and dbfilename: %s\n", dir, dbfilename)
+
 	return &Config{dir: dir, filename: dbfilename}
-}
-
-func NewConfigFromArgs(args []string) *Config {
-	flags := flag.NewFlagSet(args[0], flag.PanicOnError)
-
-	dir := flags.String("dir", "", "Name of the directory")
-	filename := flags.String("dbfilename", "", "Name of the file")
-
-	err := flags.Parse(args[1:])
-	if err != nil {
-		panic(err)
-	}
-
-	return NewConfig(*dir, *filename)
 }

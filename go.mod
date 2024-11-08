@@ -11,6 +11,7 @@ module github.com/codecrafters-io/redis-starter-go
 go 1.22
 
 require (
+	github.com/cupcake/rdb v0.0.0-20161107195141-43ba34106c76 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
