@@ -85,7 +85,7 @@ func (s *Server) listenLoop(ctx context.Context, listener net.Listener) {
 						if s.config.Replica != "" {
 							role = "slave"
 						}
-						s.client.Handle(conn, ClientInfo{Role: role})
+						s.client.Handle(conn, ClientInfo{Role: role, ReplId: "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb", ReplOffset: "0"})
 					}
 				}
 			}()

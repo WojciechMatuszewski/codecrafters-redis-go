@@ -17,7 +17,9 @@ func NewClient(store Store) *Client {
 }
 
 type ClientInfo struct {
-	Role string
+	Role       string
+	ReplId     string
+	ReplOffset string
 }
 
 func (c *Client) Handle(rw io.ReadWriter, info ClientInfo) {
@@ -97,7 +99,7 @@ func (c *Client) Handle(rw io.ReadWriter, info ClientInfo) {
 		}
 
 	case Info:
-		err := WriteBulkString(rw, fmt.Sprintf("role:%s", info.Role))
+		err := WriteBulkString(rw, fmt.Sprintf("role:%s\nmaster_replid:%s\nmaster_repl_offset:%s", info.Role, info.ReplId, info.ReplOffset))
 		if err != nil {
 			log.Printf("Error handling %s command: %v", command.Type, err)
 			return
