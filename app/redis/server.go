@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os/signal"
+	"strings"
 	"syscall"
 )
 
@@ -22,6 +23,19 @@ func (sc ServerConfig) Address() string {
 	return fmt.Sprintf("%s:%s", sc.Host, sc.Port)
 }
 
+func (sc ServerConfig) ReplicaAddress() string {
+	if sc.Replica == "" {
+		return ""
+	}
+
+	addressParts := strings.Split(sc.Replica, " ")
+	if len(addressParts) < 1 {
+		return ""
+	}
+
+	return fmt.Sprintf("%s:%s", addressParts[0], addressParts[1])
+}
+
 type Server struct {
 	config ServerConfig
 	client *Client
@@ -31,25 +45,61 @@ func NewServer(config ServerConfig, client *Client) *Server {
 	return &Server{config: config, client: client}
 }
 
-func (s *Server) ListenAndServe() error {
-	fmt.Printf("Starting the server on %s\n", s.config.Address())
+func (s *Server) ListenAndServe(ctx context.Context) error {
+	fmt.Printf("Starting the server: %s\n", s.config.Address())
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	listenConfig := net.ListenConfig{}
-	listener, err := listenConfig.Listen(ctx, protocol, s.config.Address())
+	err := s.listen(ctx, s.config.Address())
 	if err != nil {
-		return fmt.Errorf("failed to listen to %s connections on %s", protocol, s.config.Address())
+		return err
 	}
-	defer listener.Close()
 
-	go s.listenLoop(ctx, listener)
+	err = s.connect(ctx, s.config.ReplicaAddress())
+	if err != nil {
+		return err
+	}
 
 	<-ctx.Done()
 
 	fmt.Println("Shutting the server down")
 
+	return nil
+}
+
+func (s *Server) listen(ctx context.Context, address string) error {
+	listenConfig := net.ListenConfig{}
+	listener, err := listenConfig.Listen(ctx, protocol, address)
+	if err != nil {
+		return fmt.Errorf("failed to listen to %s connections on %s: %w", protocol, address, err)
+	}
+
+	go s.listenLoop(ctx, listener)
+	return nil
+}
+
+func (s *Server) connect(ctx context.Context, address string) error {
+	if address == "" {
+		return nil
+	}
+
+	fmt.Printf("Connecting to address: %s\n", address)
+
+	dialer := net.Dialer{}
+	conn, err := dialer.DialContext(ctx, "tcp", address)
+	if err != nil {
+		return fmt.Errorf("failed to connect to address: %s, %w", address, err)
+	}
+
+	err = Write(conn, FormatArray(
+		FormatBulkString("PING"),
+	))
+	if err != nil {
+		return fmt.Errorf("failed to write the PING message to address: %s, %w", address, err)
+	}
+
+	go s.handleLoop(ctx, conn)
 	return nil
 }
 
@@ -67,28 +117,30 @@ func (s *Server) listenLoop(ctx context.Context, listener net.Listener) {
 					return
 				}
 
-				fmt.Println("Error accepting the connection:", err)
+				fmt.Println("error accepting the connection:", err)
 				continue
 			}
 
-			fmt.Println("New connection:", conn.RemoteAddr())
+			fmt.Printf("New connection to the server: %s\n", conn.RemoteAddr())
 
-			go func() {
-				defer conn.Close()
-				for {
-					select {
-					case <-ctx.Done():
-						fmt.Println("Context is done!")
-						return
-					default:
-						role := "master"
-						if s.config.Replica != "" {
-							role = "slave"
-						}
-						s.client.Handle(conn, ClientInfo{Role: role, ReplId: "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb", ReplOffset: "0"})
-					}
-				}
-			}()
+			go s.handleLoop(ctx, conn)
+		}
+	}
+}
+
+func (s *Server) handleLoop(ctx context.Context, conn net.Conn) {
+	defer conn.Close()
+	for {
+		select {
+		case <-ctx.Done():
+			fmt.Println("Context is done!")
+			return
+		default:
+			role := "master"
+			if s.config.Replica != "" {
+				role = "slave"
+			}
+			s.client.Handle(conn, ClientInfo{Role: role, ReplId: "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb", ReplOffset: "0"})
 		}
 	}
 }

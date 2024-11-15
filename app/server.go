@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"flag"
+	"log"
 
 	"github.com/codecrafters-io/redis-starter-go/app/redis"
 )
@@ -29,5 +31,8 @@ func main() {
 		Replica: *replica,
 	}, client)
 
-	server.ListenAndServe()
+	err := server.ListenAndServe(context.Background())
+	if err != nil {
+		log.Fatalln("Server error:", err)
+	}
 }

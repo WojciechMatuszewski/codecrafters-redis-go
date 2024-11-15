@@ -7,43 +7,52 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"strconv"
 	"strings"
 )
 
-type CmdType string
+type CommandType string
 
 const (
-	Echo CmdType = "echo"
-	Ping CmdType = "ping"
-	Set  CmdType = "set"
-	Get  CmdType = "get"
-	Cfg  CmdType = "config"
-	Info CmdType = "info"
+	Echo CommandType = "echo"
+	Ping CommandType = "ping"
+	Set  CommandType = "set"
+	Get  CommandType = "get"
+	Cfg  CommandType = "config"
+	Info CommandType = "info"
+	Pong CommandType = "pong"
+
+	Ignore CommandType = "ignore"
 )
 
-type Cmd struct {
-	Type CmdType
+type MsgType string
+
+const (
+	Array        MsgType = "*"
+	SimpleString MsgType = "+"
+)
+
+type Message struct {
+	Type CommandType
 	Args []string
 }
 
-func ParseCommand(buf []byte) Cmd {
+func ParseMessage(buf []byte) Message {
 	if len(buf) == 0 {
 		log.Fatalf("Malformed input data: empty buffer")
 	}
 
-	var cmd = Cmd{}
+	var cmd = Message{}
 	reader := bufio.NewReader(bytes.NewReader(buf))
 
-	// Array
-	rawSize, err := reader.ReadBytes('\n')
+	rawTypeLine, err := reader.ReadBytes('\n')
 	if err != nil {
 		log.Fatalln("Could not read line", err)
 	}
 
-	_, err = strconv.Atoi(strings.TrimSpace(strings.ReplaceAll(string(rawSize), "*", "")))
-	if err != nil {
-		log.Fatalln("Could not read the size of the array", err)
+	typeLine := strings.TrimSpace(string(rawTypeLine))
+	msgType := typeLine[0]
+	if MsgType(msgType) == SimpleString {
+		return Message{Type: Ignore, Args: []string{}}
 	}
 
 	cmdType, err := next(reader)
@@ -52,9 +61,9 @@ func ParseCommand(buf []byte) Cmd {
 	}
 	cmdType = strings.ToLower(cmdType)
 
-	switch CmdType(cmdType) {
+	switch CommandType(cmdType) {
 	case Ping:
-		return Cmd{
+		return Message{
 			Type: Ping,
 			Args: []string{},
 		}
@@ -64,7 +73,7 @@ func ParseCommand(buf []byte) Cmd {
 			log.Fatalln("Failed to read args for echo", err)
 		}
 
-		return Cmd{
+		return Message{
 			Type: Echo,
 			Args: []string{arg},
 		}
@@ -83,7 +92,7 @@ func ParseCommand(buf []byte) Cmd {
 		modifier, err := next(reader)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				return Cmd{Type: Set, Args: args}
+				return Message{Type: Set, Args: args}
 			}
 
 			log.Fatalln("Failed to read args for set", err)
@@ -97,7 +106,7 @@ func ParseCommand(buf []byte) Cmd {
 		if err != nil {
 			log.Fatalln("Failed to read the expiry time for SET: %w", err)
 		}
-		return Cmd{
+		return Message{
 			Type: Set,
 			Args: append(args, expiry),
 		}
@@ -110,7 +119,7 @@ func ParseCommand(buf []byte) Cmd {
 
 		fmt.Println("GET command for key", key)
 
-		return Cmd{
+		return Message{
 			Type: Get,
 			Args: []string{key},
 		}
@@ -130,7 +139,7 @@ func ParseCommand(buf []byte) Cmd {
 			log.Fatalln("Could not read CONFIG key", err)
 		}
 
-		return Cmd{
+		return Message{
 			Type: Cfg,
 			Args: []string{subCmd, cfgKey},
 		}
@@ -145,7 +154,7 @@ func ParseCommand(buf []byte) Cmd {
 			log.Fatalln("Unknown CONFIG sub-command", subCmd)
 		}
 
-		return Cmd{
+		return Message{
 			Type: Info,
 			Args: []string{subCmd},
 		}
@@ -158,35 +167,94 @@ func ParseCommand(buf []byte) Cmd {
 }
 
 func Write(w io.Writer, output string) error {
-	fmt.Println("Responding with\n", output)
+	fmt.Printf("Responding with: %q\n", output)
 	_, err := w.Write([]byte(output))
 	return err
 }
 
 func WriteBulkString(w io.Writer, input string) error {
-	output := BulkString(input)
-	fmt.Println("Responding with\n", output)
+	output := FormatBulkString(input)
+	fmt.Printf("Responding with: %q\n", output)
 
 	_, err := w.Write([]byte(output))
 	return err
 }
 
 func WriteSimpleString(w io.Writer, input string) error {
-	output := SimpleString(input)
-	fmt.Println("Responding with\n", output)
+	output := FormatSimpleString(input)
+	fmt.Printf("Responding with: %q\n", output)
 
 	_, err := w.Write([]byte(output))
 	return err
 }
 
 func WriteNullBulkString(w io.Writer) error {
-	output := NullBulkString()
-	fmt.Println("Responding with\n", output)
+	output := FormatNullBulkString()
+	fmt.Printf("Responding with: %q\n", output)
 
 	_, err := w.Write([]byte(output))
 	fmt.Println("Responding with null bulk")
 	return err
 }
+
+func FormatBulkString(input string) string {
+	return fmt.Sprintf("$%d\r\n%s\r\n", len(input), input)
+}
+
+func FormatSimpleString(input string) string {
+	return fmt.Sprintf("+%s\r\n", input)
+}
+
+func FormatNullBulkString() string {
+	return "$-1\r\n"
+}
+
+func FormatArray(elements ...string) string {
+	output := fmt.Sprintf("*%v\r\n", len(elements))
+	for _, element := range elements {
+		output = fmt.Sprintf("%s%s", output, element)
+	}
+
+	return output
+}
+
+// const (
+// 	typeBlobString   = '$'
+// 	typeSimpleString = '+'
+// 	typeArray        = '*'
+// )
+
+// type RESP struct {
+// 	Type   byte
+// 	values []string
+// }
+
+// func ReadMessage(reader *bufio.Reader) {
+// 	typeLineBuf, err := reader.ReadBytes('\n')
+// 	if err != nil {
+// 		panic(err)
+// 	}
+
+// 	typeLine := strings.TrimSpace(string(typeLineBuf))
+// 	mType := typeLine[0]
+// 	switch mType {
+// 	case typeArray:
+// 		arrayLength, err := reader.ReadByte()
+// 		if err != nil {
+// 			panic(err)
+// 		}
+
+// 		arrayLength, err := strconv.Atoi(string(rawArrayLength))
+// 		if err != nil {
+// 			panic(err)
+// 		}
+
+// 		fmt.Println("arrayLength", arrayLength)
+
+// 		out, err := io.ReadAll(reader)
+// 		fmt.Println(string(out))
+// 	}
+// }
 
 func next(reader *bufio.Reader) (string, error) {
 	rawNextType, err := reader.ReadBytes('\n')
