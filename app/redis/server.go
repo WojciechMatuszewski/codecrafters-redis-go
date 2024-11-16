@@ -155,7 +155,7 @@ func (s *Server) handleHandshake(ctx context.Context, conn net.Conn) error {
 
 	err = Write(conn, FormatArray(
 		FormatBulkString("REPLCONF"),
-		FormatBulkString("linstening-port"),
+		FormatBulkString("listening-port"),
 		FormatBulkString(s.config.Port),
 	))
 	if err != nil {
