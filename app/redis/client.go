@@ -39,8 +39,6 @@ func (c *Client) Handle(rw io.ReadWriter, info ClientInfo) {
 
 	message := ParseMessage(input)
 
-	fmt.Printf("Executing command: %v\n", message.Type)
-
 	switch message.Type {
 	case Ping:
 		err := WriteSimpleString(rw, "PONG")
@@ -49,19 +47,19 @@ func (c *Client) Handle(rw io.ReadWriter, info ClientInfo) {
 			return
 		}
 	case Echo:
-		arg := message.Args[0]
+		arg := message.Values[0]
 		err := WriteBulkString(rw, arg)
 		if err != nil {
 			log.Printf("Error handling %s command: %v", message.Type, err)
 			return
 		}
 	case Set:
-		key := message.Args[0]
-		value := message.Args[1]
+		key := message.Values[0]
+		value := message.Values[1]
 
 		var expiry *int
-		if len(message.Args) > 2 {
-			rawExpiryMs := message.Args[2]
+		if len(message.Values) > 3 {
+			rawExpiryMs := message.Values[3]
 			expiryMs, err := strconv.Atoi(rawExpiryMs)
 			if err != nil {
 				log.Fatalln("Could not convert the expiry time to integer: %w", err)
@@ -79,7 +77,7 @@ func (c *Client) Handle(rw io.ReadWriter, info ClientInfo) {
 		}
 
 	case Get:
-		key := message.Args[0]
+		key := message.Values[0]
 		value, found := c.store.Get(key)
 
 		if !found {
@@ -100,6 +98,13 @@ func (c *Client) Handle(rw io.ReadWriter, info ClientInfo) {
 
 	case Info:
 		err := WriteBulkString(rw, fmt.Sprintf("role:%s\nmaster_replid:%s\nmaster_repl_offset:%s", info.Role, info.ReplId, info.ReplOffset))
+		if err != nil {
+			log.Printf("Error handling %s command: %v", message.Type, err)
+			return
+		}
+
+	case ReplicaConf:
+		err := WriteSimpleString(rw, "OK")
 		if err != nil {
 			log.Printf("Error handling %s command: %v", message.Type, err)
 			return
