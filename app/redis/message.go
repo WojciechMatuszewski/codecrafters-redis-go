@@ -16,6 +16,7 @@ const (
 	Info        MessageType = "info"
 	Pong        MessageType = "pong"
 	ReplicaConf MessageType = "replicaconf"
+	PSync       MessageType = "psync"
 )
 
 type Message struct {

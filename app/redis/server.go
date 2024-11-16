@@ -173,5 +173,16 @@ func (s *Server) handleHandshake(ctx context.Context, conn net.Conn) error {
 		return err
 	}
 
+	s.client.Handle(ctx, conn, ClientInfo{Role: "slave"})
+
+	err = Write(conn, FormatArray(
+		FormatBulkString("PSYNC"),
+		FormatBulkString("?"),
+		FormatBulkString("-1"),
+	))
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
