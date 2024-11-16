@@ -92,11 +92,9 @@ func (s *Server) connect(ctx context.Context, address string) error {
 		return fmt.Errorf("failed to connect to address: %s, %w", address, err)
 	}
 
-	err = Write(conn, FormatArray(
-		FormatBulkString("PING"),
-	))
+	err = s.handleHandshake(ctx, conn)
 	if err != nil {
-		return fmt.Errorf("failed to write the PING message to address: %s, %w", address, err)
+		return fmt.Errorf("failed to establish the handshake: %w", err)
 	}
 
 	go s.handleLoop(ctx, conn)
@@ -140,7 +138,40 @@ func (s *Server) handleLoop(ctx context.Context, conn net.Conn) {
 			if s.config.Replica != "" {
 				role = "slave"
 			}
-			s.client.Handle(conn, ClientInfo{Role: role, ReplId: "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb", ReplOffset: "0"})
+			s.client.Handle(ctx, conn, ClientInfo{Role: role, ReplId: "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb", ReplOffset: "0"})
 		}
 	}
+}
+
+func (s *Server) handleHandshake(ctx context.Context, conn net.Conn) error {
+	err := Write(conn, FormatArray(
+		FormatBulkString("PING"),
+	))
+	if err != nil {
+		return err
+	}
+
+	s.client.Handle(ctx, conn, ClientInfo{Role: "slave"})
+
+	err = Write(conn, FormatArray(
+		FormatBulkString("REPLCONF"),
+		FormatBulkString("linstening-port"),
+		FormatBulkString(s.config.Port),
+	))
+	if err != nil {
+		return err
+	}
+
+	s.client.Handle(ctx, conn, ClientInfo{Role: "slave"})
+
+	err = Write(conn, FormatArray(
+		FormatBulkString("REPLCONF"),
+		FormatBulkString("capa"),
+		FormatBulkString("psync2"),
+	))
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -1,6 +1,7 @@
 package redis
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -22,7 +23,8 @@ type ClientInfo struct {
 	ReplOffset string
 }
 
-func (c *Client) Handle(rw io.ReadWriter, info ClientInfo) {
+func (c *Client) Handle(ctx context.Context, rw io.ReadWriter, info ClientInfo) {
+
 	buf := make([]byte, 1024)
 	n, err := rw.Read(buf)
 	if err != nil {
