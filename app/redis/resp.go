@@ -84,7 +84,7 @@ func (r *Resp) readBulk() (Value, error) {
 		return Value{}, fmt.Errorf("failed to read line while reading bulk: %w", err)
 	}
 
-	len, err := r.parseInteger(typeLine[1])
+	len, err := r.parseInteger(typeLine[1:])
 	if err != nil {
 		panic(err)
 	}
@@ -119,7 +119,7 @@ func (r *Resp) readArray() (Value, error) {
 		return Value{}, fmt.Errorf("failed to read line while reading array: %w", err)
 	}
 
-	len, err := r.parseInteger(typeLine[1])
+	len, err := r.parseInteger(typeLine[1:])
 	if err != nil {
 		panic(err)
 	}
@@ -138,7 +138,7 @@ func (r *Resp) readArray() (Value, error) {
 	return v, nil
 }
 
-func (r *Resp) parseInteger(input byte) (int, error) {
+func (r *Resp) parseInteger(input []byte) (int, error) {
 	n, err := strconv.Atoi(string(input))
 	if err != nil {
 		return 0, err

@@ -114,13 +114,13 @@ func (c *Client) Handle(ctx context.Context, rw io.ReadWriter, info ClientInfo) 
 		}
 
 	case PSync:
-		b64RDB := "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog=="
 		err := WriteSimpleString(rw, fmt.Sprintf("FULLRESYNC %s %s", info.ReplId, info.ReplOffset))
 		if err != nil {
 			log.Printf("Error handling %s command: %v", message.Type, err)
 			return
 		}
 
+		b64RDB := "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog=="
 		data, err := base64.StdEncoding.DecodeString(b64RDB)
 		if err != nil {
 			log.Printf("Error decoding base64 RDB file %v, error: %v", message.Type, err)

@@ -32,6 +32,10 @@ func TestClient(t *testing.T) {
 			)),
 			output: []byte(redis.FormatBulkString("hello")),
 		},
+		"ECHO - strawberry": {
+			input:  []byte("*2\r\n$4\r\nECHO\r\n$10\r\nstrawberry\r\n"),
+			output: []byte(redis.FormatBulkString("strawberry")),
+		},
 	}
 
 	for name, test := range commandTests {
@@ -45,7 +49,7 @@ func TestClient(t *testing.T) {
 			output, err := io.ReadAll(buf)
 
 			assert.NoError(t, err)
-			assert.Equal(t, test.output, output)
+			assert.Equal(t, string(test.output), string(output))
 		})
 	}
 
