@@ -125,7 +125,7 @@ func (r *Resp) readArray() (Value, error) {
 	}
 
 	arr := make([]Value, len)
-	for i := 0; i < len; i++ {
+	for i := int64(0); i < len; i++ {
 		val, err := r.Read()
 		if err != nil {
 			panic(err)
@@ -138,7 +138,7 @@ func (r *Resp) readArray() (Value, error) {
 	return v, nil
 }
 
-func (r *Resp) parseInteger(input []byte) (int, error) {
+func (r *Resp) parseInteger(input []byte) (int64, error) {
 	n, err := strconv.ParseInt(string(input), 10, 64)
 	if err != nil {
 		return 0, err
