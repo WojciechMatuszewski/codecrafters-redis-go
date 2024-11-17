@@ -2,6 +2,7 @@ package redis_test
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"testing"
@@ -12,6 +13,7 @@ import (
 )
 
 func TestClient(t *testing.T) {
+	ctx := context.Background()
 	clientInfo := redis.ClientInfo{Role: "master"}
 
 	commandTests := map[string]struct {
@@ -39,7 +41,7 @@ func TestClient(t *testing.T) {
 			buf := &bytes.Buffer{}
 			buf.Write(test.input)
 
-			client.Handle(buf, clientInfo)
+			client.Handle(ctx, buf, clientInfo)
 			output, err := io.ReadAll(buf)
 
 			assert.NoError(t, err)
@@ -59,7 +61,7 @@ func TestClient(t *testing.T) {
 			redis.FormatBulkString(key),
 			redis.FormatBulkString(value),
 		)))
-		client.Handle(buf, clientInfo)
+		client.Handle(ctx, buf, clientInfo)
 		{
 			read, err := io.ReadAll(buf)
 			assert.NoError(t, err)
@@ -70,7 +72,7 @@ func TestClient(t *testing.T) {
 			redis.FormatBulkString("GET"),
 			redis.FormatBulkString(key),
 		)))
-		client.Handle(buf, clientInfo)
+		client.Handle(ctx, buf, clientInfo)
 		{
 			read, err := io.ReadAll(buf)
 			assert.NoError(t, err)
@@ -122,7 +124,7 @@ func TestClient(t *testing.T) {
 			redis.FormatBulkString("px"),
 			redis.FormatBulkString(fmt.Sprintf("%v", expiryMs)),
 		)))
-		client.Handle(buf, clientInfo)
+		client.Handle(ctx, buf, clientInfo)
 		{
 			read, err := io.ReadAll(buf)
 			assert.NoError(t, err)
@@ -133,7 +135,7 @@ func TestClient(t *testing.T) {
 			redis.FormatBulkString("GET"),
 			redis.FormatBulkString(key),
 		)))
-		client.Handle(buf, clientInfo)
+		client.Handle(ctx, buf, clientInfo)
 		{
 			read, err := io.ReadAll(buf)
 			assert.NoError(t, err)
@@ -144,7 +146,7 @@ func TestClient(t *testing.T) {
 			redis.FormatBulkString("GET"),
 			redis.FormatBulkString(key),
 		)))
-		client.Handle(buf, clientInfo)
+		client.Handle(ctx, buf, clientInfo)
 		{
 			read, err := io.ReadAll(buf)
 			assert.NoError(t, err)
@@ -155,7 +157,7 @@ func TestClient(t *testing.T) {
 			redis.FormatBulkString("GET"),
 			redis.FormatBulkString(key),
 		)))
-		client.Handle(buf, clientInfo)
+		client.Handle(ctx, buf, clientInfo)
 		{
 			read, err := io.ReadAll(buf)
 			assert.NoError(t, err)
