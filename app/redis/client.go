@@ -113,7 +113,7 @@ func (c *Client) Handle(ctx context.Context, rw io.ReadWriter, info ClientInfo) 
 		}
 
 	case PSync:
-		err := WriteSimpleString(rw, fmt.Sprintf("FULLRESYNC %s 0", info.ReplId))
+		err := WriteSimpleString(rw, fmt.Sprintf("FULLRESYNC %s %s", info.ReplId, info.ReplOffset))
 		if err != nil {
 			log.Printf("Error handling %s command: %v", message.Type, err)
 			return
