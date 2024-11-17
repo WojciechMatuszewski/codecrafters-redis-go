@@ -139,7 +139,7 @@ func (r *Resp) readArray() (Value, error) {
 }
 
 func (r *Resp) parseInteger(input []byte) (int, error) {
-	n, err := strconv.Atoi(string(input))
+	n, err := strconv.ParseInt(string(input), 10, 64)
 	if err != nil {
 		return 0, err
 	}
