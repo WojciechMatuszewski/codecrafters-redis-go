@@ -15,7 +15,7 @@ const (
 	Cfg         MessageType = "config"
 	Info        MessageType = "info"
 	Pong        MessageType = "pong"
-	ReplicaConf MessageType = "replicaconf"
+	ReplicaConf MessageType = "replconf"
 	PSync       MessageType = "psync"
 )
 

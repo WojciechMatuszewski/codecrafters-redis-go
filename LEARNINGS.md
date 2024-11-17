@@ -26,6 +26,12 @@
 
     - The flip side is that you write the async code as if it was synchronous.
 
+    A good example of blocking call is the `Read` on `io.Reader`. Calling `.Read` is a _point of no return_ – you can't cancel that.
+
+    But, if you call it multiple times, you can check if the `ctx` is already cancelled BEFORE calling `.Read`.
+
+    I found [this package](https://github.com/dolmen-go/contextio) useful as an implementation reference.
+
 - The `flag` package is pretty basic.
 
   - There are some gymnastics involved if you want to ignore unknown flags.

@@ -94,10 +94,11 @@ func (s *Server) connect(ctx context.Context, address string) error {
 
 	err = s.handleHandshake(ctx, conn)
 	if err != nil {
-		return fmt.Errorf("failed to establish the handshake: %w", err)
+		return err
 	}
 
 	go s.handleLoop(ctx, conn)
+
 	return nil
 }
 

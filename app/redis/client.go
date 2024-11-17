@@ -24,8 +24,8 @@ type ClientInfo struct {
 }
 
 func (c *Client) Handle(ctx context.Context, rw io.ReadWriter, info ClientInfo) {
-
 	buf := make([]byte, 1024)
+
 	n, err := rw.Read(buf)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
