@@ -9,28 +9,22 @@ import (
 )
 
 const (
+	host        = "0.0.0.0"
 	defaultPort = "6379"
-	defaultHost = "0.0.0.0"
 )
 
 var (
-	cfgDir        = flag.String("dir", "", "config directory")
-	cfgDbFilename = flag.String("dbfilename", "", "config dbfilename")
-	port          = flag.String("port", defaultPort, "port of the server")
-	replica       = flag.String("replicaof", "", "replica of server")
+	port      = flag.String("port", defaultPort, "port of the server")
+	replicaof = flag.String("replicaof", "", "is replica of")
 )
 
 func main() {
 	flag.Parse()
 
 	client := redis.NewClient(redis.NewInMemoryStore())
+	replicator := redis.NewServerReplicator(host, *port, *replicaof)
 
-	server := redis.NewServer(redis.ServerConfig{
-		Host:    defaultHost,
-		Port:    *port,
-		Replica: *replica,
-	}, client)
-
+	server := redis.NewServer(client, replicator, host, *port)
 	err := server.ListenAndServe(context.Background())
 	if err != nil {
 		log.Fatalln("Server error:", err)

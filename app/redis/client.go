@@ -1,12 +1,7 @@
 package redis
 
 import (
-	"context"
-	"encoding/base64"
-	"errors"
 	"fmt"
-	"io"
-	"log"
 	"strconv"
 )
 
@@ -18,54 +13,30 @@ func NewClient(store Store) *Client {
 	return &Client{store: store}
 }
 
-type ClientInfo struct {
-	Role       string
-	ReplId     string
-	ReplOffset string
-}
-
-func (c *Client) Handle(ctx context.Context, rw io.ReadWriter, info ClientInfo) {
-	buf := make([]byte, 1024)
-
-	n, err := rw.Read(buf)
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			return
-		}
-
-		panic(err)
-	}
-
-	input := buf[:n]
-
-	fmt.Printf("Received input: %q\n", string(input))
-
-	message := ParseMessage(input)
-
-	switch message.Type {
+func (c *Client) Handle(cmd Command) (Value, error) {
+	switch cmd.Type {
 	case Ping:
-		err := WriteSimpleString(rw, "PONG")
-		if err != nil {
-			log.Printf("Error handling %s command: %v", message.Type, err)
-			return
-		}
+		return Value{Type: SimpleString, SimpleString: "PONG"}, nil
 	case Echo:
-		arg := message.Values[0]
-		err := WriteBulkString(rw, arg)
-		if err != nil {
-			log.Printf("Error handling %s command: %v", message.Type, err)
-			return
+		return Value{Type: Bulk, Bulk: cmd.Args[0]}, nil
+	case Get:
+		key := cmd.Args[0]
+		value, found := c.store.Get(key)
+		if !found {
+			return Value{Type: Bulk, Bulk: "-1"}, nil
 		}
+		return Value{Type: Bulk, Bulk: value}, nil
+
 	case Set:
-		key := message.Values[0]
-		value := message.Values[1]
+		key := cmd.Args[0]
+		value := cmd.Args[1]
 
 		var expiry *int
-		if len(message.Values) > 3 {
-			rawExpiryMs := message.Values[3]
+		if len(cmd.Args) > 3 {
+			rawExpiryMs := cmd.Args[3]
 			expiryMs, err := strconv.Atoi(rawExpiryMs)
 			if err != nil {
-				log.Fatalln("Could not convert the expiry time to integer: %w", err)
+				return Value{}, fmt.Errorf("failed to convert expiry time to milliseconds: %w", err)
 			}
 
 			expiry = &expiryMs
@@ -73,64 +44,116 @@ func (c *Client) Handle(ctx context.Context, rw io.ReadWriter, info ClientInfo) 
 
 		c.store.Set(key, value, expiry)
 
-		err := WriteSimpleString(rw, "OK")
-		if err != nil {
-			log.Printf("Error handling %s command: %v", message.Type, err)
-			return
-		}
-
-	case Get:
-		key := message.Values[0]
-		value, found := c.store.Get(key)
-
-		if !found {
-			err := WriteNullBulkString(rw)
-			if err != nil {
-				log.Printf("Error handling %s command: %v", message.Type, err)
-				return
-			}
-
-			return
-		}
-
-		err := WriteBulkString(rw, value)
-		if err != nil {
-			log.Printf("Error handling %s command: %v", message.Type, err)
-			return
-		}
-
-	case Info:
-		err := WriteBulkString(rw, fmt.Sprintf("role:%s\nmaster_replid:%s\nmaster_repl_offset:%s", info.Role, info.ReplId, info.ReplOffset))
-		if err != nil {
-			log.Printf("Error handling %s command: %v", message.Type, err)
-			return
-		}
-
-	case ReplicaConf:
-		err := WriteSimpleString(rw, "OK")
-		if err != nil {
-			log.Printf("Error handling %s command: %v", message.Type, err)
-			return
-		}
-
-	case PSync:
-		err := WriteSimpleString(rw, fmt.Sprintf("FULLRESYNC %s %s", info.ReplId, info.ReplOffset))
-		if err != nil {
-			log.Printf("Error handling %s command: %v", message.Type, err)
-			return
-		}
-
-		b64RDB := "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog=="
-		data, err := base64.StdEncoding.DecodeString(b64RDB)
-		if err != nil {
-			log.Printf("Error decoding base64 RDB file %v, error: %v", message.Type, err)
-			return
-		}
-
-		err = Write(rw, fmt.Sprintf("$%v\r\n%s", len(data), data))
-		if err != nil {
-			log.Printf("Error handling %s command: %v", message.Type, err)
-			return
-		}
+		return Value{Type: SimpleString, SimpleString: "OK"}, nil
 	}
+
+	return Value{}, fmt.Errorf("unknown command: %v", cmd)
 }
+
+// func (c *Client) Handle(ctx context.Context, message Message) (Message, error) {
+// 	switch message.Type {
+// 	case Ping:
+// 		return Message{Type: MessageType(SimpleString), Values: []Value{}}
+// 	}
+// }
+
+// Pass role here?
+// func (c *Client) Handle(ctx context.Context, rw io.ReadWriter, replicator Replicator) {
+// 	buf := make([]byte, 1024)
+// 	n, err := rw.Read(buf)
+// 	if err != nil {
+// 		if errors.Is(err, io.EOF) {
+// 			return
+// 		}
+
+// 		panic(err)
+// 	}
+
+// 	input := buf[:n]
+
+// 	fmt.Printf("Received input: %q\n", string(input))
+
+// 	message := ParseMessage(input)
+
+// 	switch message.Type {
+// 	case Ping:
+// 		err := WriteSimpleString(rw, "PONG")
+// 		if err != nil {
+// 			log.Printf("Error handling %s command: %v", message.Type, err)
+// 			return
+// 		}
+// 	case Echo:
+// 		arg := message.Values[0]
+// 		err := WriteBulkString(rw, arg)
+// 		if err != nil {
+// 			log.Printf("Error handling %s command: %v", message.Type, err)
+// 			return
+// 		}
+// 	case Set:
+// 		key := message.Values[0]
+// 		value := message.Values[1]
+
+// 		var expiry *int
+// 		if len(message.Values) > 3 {
+// 			rawExpiryMs := message.Values[3]
+// 			expiryMs, err := strconv.Atoi(rawExpiryMs)
+// 			if err != nil {
+// 				log.Fatalln("Could not convert the expiry time to integer: %w", err)
+// 			}
+
+// 			expiry = &expiryMs
+// 		}
+
+// 		c.store.Set(key, value, expiry)
+
+// 		replicator.Replicate(rw, message)
+
+// 		// Only return when the role === "master"
+// 		err := WriteSimpleString(rw, "OK")
+// 		if err != nil {
+// 			log.Printf("Error handling %s command: %v", message.Type, err)
+// 			return
+// 		}
+
+// 	case Get:
+// 		key := message.Values[0]
+// 		value, found := c.store.Get(key)
+
+// 		if !found {
+// 			err := WriteNullBulkString(rw)
+// 			if err != nil {
+// 				log.Printf("Error handling %s command: %v", message.Type, err)
+// 				return
+// 			}
+
+// 			return
+// 		}
+
+// 		err := WriteBulkString(rw, value)
+// 		if err != nil {
+// 			log.Printf("Error handling %s command: %v", message.Type, err)
+// 			return
+// 		}
+
+// 		// case Info:
+// 		// 	err := replicator.HandleInfo(rw)
+// 		// 	if err != nil {
+// 		// 		log.Printf("Error handling %s command: %v", message.Type, err)
+// 		// 		return
+// 		// 	}
+
+// 		// case ReplicaConf:
+// 		// 	err := replicator.HandleReplicaConf(rw)
+// 		// 	if err != nil {
+// 		// 		log.Printf("Error handling %s command: %v", message.Type, err)
+// 		// 		return
+// 		// 	}
+
+// 		// case PSync:
+// 		// 	err = replicator.HandlePSync(rw)
+// 		// 	if err != nil {
+// 		// 		log.Printf("Error handling %s command: %v", message.Type, err)
+// 		// 		return
+// 		// 	}
+// 	}
+// }

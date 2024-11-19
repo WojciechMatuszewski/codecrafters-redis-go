@@ -24,14 +24,35 @@ const (
 	Bulk         ValueType = "bulk"
 	Array        ValueType = "array"
 	SimpleString ValueType = "string"
+	Raw          ValueType = "raw"
 )
 
 type Value struct {
-	Typ  ValueType
-	Str  string
-	Num  int
-	Bulk string
-	Arr  []Value
+	Type         ValueType
+	SimpleString string
+	Number       int
+	Bulk         string
+	Array        []Value
+	Raw          string
+}
+
+func (v Value) Format() string {
+	switch v.Type {
+	case Bulk:
+		return FormatBulkString(v.Bulk)
+	case Array:
+		elements := make([]string, len(v.Array))
+		for i := 0; i < len(v.Array)-1; i++ {
+			elements[i] = v.Array[i].Format()
+		}
+		return FormatArray(elements...)
+	case SimpleString:
+		return FormatSimpleString(v.SimpleString)
+	case Raw:
+		return v.Raw
+	}
+
+	panic("Unknown value type")
 }
 
 type Resp struct {
@@ -48,7 +69,7 @@ func (r *Resp) Read() (Value, error) {
 		return Value{}, fmt.Errorf("failed to read byte: %w", err)
 	}
 	if len(buf) > 1 {
-		return Value{}, errors.New("issue with peeking the buffer")
+		return Value{}, errors.New("failed to read byte: buffer is empty")
 	}
 
 	_type := RespType(buf[0])
@@ -77,7 +98,7 @@ func (r *Resp) readLine() ([]byte, error) {
 }
 
 func (r *Resp) readBulk() (Value, error) {
-	v := Value{Typ: Bulk}
+	v := Value{Type: Bulk}
 
 	typeLine, err := r.readLine()
 	if err != nil {
@@ -100,19 +121,19 @@ func (r *Resp) readBulk() (Value, error) {
 }
 
 func (r *Resp) readSimpleString() (Value, error) {
-	v := Value{Typ: SimpleString}
+	v := Value{Type: SimpleString}
 
 	contentLine, err := r.readLine()
 	if err != nil {
 		return Value{}, fmt.Errorf("failed to read line while reading string: %w", err)
 	}
 
-	v.Str = string(contentLine[1:])
+	v.SimpleString = string(contentLine[1:])
 	return v, nil
 }
 
 func (r *Resp) readArray() (Value, error) {
-	v := Value{Typ: Array}
+	v := Value{Type: Array}
 
 	typeLine, err := r.readLine()
 	if err != nil {
@@ -134,7 +155,7 @@ func (r *Resp) readArray() (Value, error) {
 		arr[i] = val
 	}
 
-	v.Arr = arr
+	v.Array = arr
 	return v, nil
 }
 
