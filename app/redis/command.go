@@ -1,24 +1,33 @@
 package redis
 
-import "strings"
+import (
+	"io"
+	"strings"
+)
 
 type CommandType string
 
 const (
-	Echo        CommandType = "echo"
-	Ping        CommandType = "ping"
-	Set         CommandType = "set"
-	Get         CommandType = "get"
-	Cfg         CommandType = "config"
-	Info        CommandType = "info"
-	Pong        CommandType = "pong"
-	ReplicaConf CommandType = "replconf"
-	PSync       CommandType = "psync"
+	Echo     CommandType = "echo"
+	Ping     CommandType = "ping"
+	Set      CommandType = "set"
+	Get      CommandType = "get"
+	Cfg      CommandType = "config"
+	Info     CommandType = "info"
+	Pong     CommandType = "pong"
+	ReplConf CommandType = "replconf"
+	PSync    CommandType = "psync"
 )
 
 type Command struct {
 	Type CommandType
 	Args []string
+
+	value Value
+}
+
+func (c Command) Write(w io.Writer) error {
+	return c.value.Write(w)
 }
 
 func NewCommand(value Value) Command {
@@ -29,16 +38,15 @@ func NewCommand(value Value) Command {
 		for i := 1; i < len(value.Array); i++ {
 			args = append(args, value.Array[i].Bulk)
 		}
-
-		return Command{Type: CommandType(mType), Args: args}
+		return Command{Type: CommandType(mType), Args: args, value: value}
 
 	case SimpleString:
 		mType := strings.ToLower(value.SimpleString)
-		return Command{Type: CommandType(mType), Args: []string{value.SimpleString}}
+		return Command{Type: CommandType(mType), Args: []string{value.SimpleString}, value: value}
 
 	case Bulk:
 		mType := strings.ToLower(value.Bulk)
-		return Command{Type: CommandType(mType), Args: []string{value.Bulk}}
+		return Command{Type: CommandType(mType), Args: []string{value.Bulk}, value: value}
 
 	default:
 		panic("Unknown value")

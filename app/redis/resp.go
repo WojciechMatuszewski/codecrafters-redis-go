@@ -42,7 +42,7 @@ func (v Value) Format() string {
 		return FormatBulkString(v.Bulk)
 	case Array:
 		elements := make([]string, len(v.Array))
-		for i := 0; i < len(v.Array)-1; i++ {
+		for i := 0; i < len(v.Array); i++ {
 			elements[i] = v.Array[i].Format()
 		}
 		return FormatArray(elements...)
@@ -53,6 +53,11 @@ func (v Value) Format() string {
 	}
 
 	panic("Unknown value type")
+}
+
+func (v Value) Write(w io.Writer) error {
+	_, err := w.Write([]byte(v.Format()))
+	return err
 }
 
 type Resp struct {
@@ -149,6 +154,10 @@ func (r *Resp) readArray() (Value, error) {
 	for i := int64(0); i < len; i++ {
 		val, err := r.Read()
 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return v, nil
+			}
+
 			panic(err)
 		}
 
@@ -168,36 +177,31 @@ func (r *Resp) parseInteger(input []byte) (int64, error) {
 	return n, nil
 }
 
-func Write(w io.Writer, output string) error {
-	fmt.Printf("Responding with: %q\n", output)
-	_, err := w.Write([]byte(output))
-	return err
-}
+// func Write(w io.Writer, output string) error {
+// 	_, err := w.Write([]byte(output))
+// 	return err
+// }
 
-func WriteBulkString(w io.Writer, input string) error {
-	output := FormatBulkString(input)
-	fmt.Printf("Responding with: %q\n", output)
+// func WriteBulkString(w io.Writer, input string) error {
+// 	output := FormatBulkString(input)
+// 	_, err := w.Write([]byte(output))
+// 	return err
+// }
 
-	_, err := w.Write([]byte(output))
-	return err
-}
+// func WriteSimpleString(w io.Writer, input string) error {
+// 	output := FormatSimpleString(input)
+// 	_, err := w.Write([]byte(output))
+// 	return err
+// }
 
-func WriteSimpleString(w io.Writer, input string) error {
-	output := FormatSimpleString(input)
-	fmt.Printf("Responding with: %q\n", output)
+// func WriteNullBulkString(w io.Writer) error {
+// 	output := FormatNullBulkString()
+// 	fmt.Printf("Responding with: %q\n", output)
 
-	_, err := w.Write([]byte(output))
-	return err
-}
-
-func WriteNullBulkString(w io.Writer) error {
-	output := FormatNullBulkString()
-	fmt.Printf("Responding with: %q\n", output)
-
-	_, err := w.Write([]byte(output))
-	fmt.Println("Responding with null bulk")
-	return err
-}
+// 	_, err := w.Write([]byte(output))
+// 	fmt.Println("Responding with null bulk")
+// 	return err
+// }
 
 func FormatBulkString(input string) string {
 	return fmt.Sprintf("$%d\r\n%s\r\n", len(input), input)

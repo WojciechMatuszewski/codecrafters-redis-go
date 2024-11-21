@@ -48,9 +48,9 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	}
 	go s.serve(ctx, listener)
 
-	err = s.replicator.Connect(ctx)
+	err = s.replicator.ConnectMaster(ctx)
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("failed to connect to master: %w", err)
 	}
 
 	<-ctx.Done()
@@ -69,34 +69,7 @@ func (s *Server) listen(ctx context.Context, address string) (net.Listener, erro
 
 	return listener, err
 
-	// go s.listenLoop(ctx, listener)
-	// return nil
 }
-
-// func (s *Server) connect(ctx context.Context, address string) (net.Conn, error) {
-// 	if address == "" {
-// 		return nil, nil
-// 	}
-
-// 	fmt.Printf("Connecting to address: %s\n", address)
-
-// 	dialer := net.Dialer{}
-// 	conn, err := dialer.DialContext(ctx, "tcp", address)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to connect to address: %s, %w", address, err)
-// 	}
-
-// 	return conn, nil
-
-// 	// err = s.handleHandshake(ctx, conn)
-// 	// if err != nil {
-// 	// 	return nil, err
-// 	// }
-
-// 	// go s.handleLoop(ctx, conn)
-
-// 	// return nil
-// }
 
 func (s *Server) serve(ctx context.Context, listener net.Listener) {
 	fmt.Printf("Accepting connection on address: %s\n", listener.Addr())
@@ -146,11 +119,35 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 
 			cmd := NewCommand(value)
 
+			fmt.Println("Handling command", cmd)
+
 			switch cmd.Type {
 			case Info:
-			case ReplicaConf:
+				outValues, err := s.replicator.Handle(ctx, cmd)
+				if err != nil {
+					log.Fatalf("failed to handle replicator command: %v", err)
+				}
+
+				for _, outValue := range outValues {
+					_, err = connection.Write([]byte(outValue.Format()))
+					if err != nil {
+						log.Fatalf("failed to respond to client command: %v", err)
+					}
+				}
+			case ReplConf:
+				outValues, err := s.replicator.Handle(ctx, cmd)
+				if err != nil {
+					log.Fatalf("failed to handle replicator command: %v", err)
+				}
+
+				for _, outValue := range outValues {
+					_, err = connection.Write([]byte(outValue.Format()))
+					if err != nil {
+						log.Fatalf("failed to respond to client command: %v", err)
+					}
+				}
 			case PSync:
-				outValues, err := s.replicator.Handle(cmd)
+				outValues, err := s.replicator.Handle(ctx, cmd)
 				if err != nil {
 					log.Fatalf("failed to handle replicator command: %v", err)
 				}
@@ -168,6 +165,18 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 					log.Fatalf("failed to handle client command: %v", err)
 				}
 
+				err = s.replicator.Replicate(ctx, cmd)
+				if err != nil {
+					log.Fatalf("failed to replicate command %v", cmd)
+				}
+
+				if s.replicator.Role() == "slave" {
+					fmt.Printf("Server is a replica. Skipping the response\n")
+					return
+				}
+
+				fmt.Println("Responding with", outValue)
+
 				_, err = connection.Write([]byte(outValue.Format()))
 				if err != nil {
 					log.Fatalf("failed to respond to client command: %v", err)
@@ -176,60 +185,3 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 		}
 	}
 }
-
-// func (s *Server) handleLoop(ctx context.Context, conn net.Conn) {
-// 	defer conn.Close()
-// 	for {
-// 		select {
-// 		case <-ctx.Done():
-// 			fmt.Println("Context is done!")
-// 			return
-// 		default:
-// 			s.client.Handle(ctx, conn, s.replicator)
-// 		}
-// 	}
-// }
-
-// func (s *Server) handleHandshake(ctx context.Context, conn net.Conn) error {
-// 	err := Write(conn, FormatArray(
-// 		FormatBulkString("PING"),
-// 	))
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	s.client.Handle(ctx, conn, s.replicator)
-
-// 	err = Write(conn, FormatArray(
-// 		FormatBulkString("REPLCONF"),
-// 		FormatBulkString("listening-port"),
-// 		FormatBulkString(s.Port),
-// 	))
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	s.client.Handle(ctx, conn, s.replicator)
-
-// 	err = Write(conn, FormatArray(
-// 		FormatBulkString("REPLCONF"),
-// 		FormatBulkString("capa"),
-// 		FormatBulkString("psync2"),
-// 	))
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	s.client.Handle(ctx, conn, s.replicator)
-
-// 	err = Write(conn, FormatArray(
-// 		FormatBulkString("PSYNC"),
-// 		FormatBulkString("?"),
-// 		FormatBulkString("-1"),
-// 	))
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	return nil
-// }

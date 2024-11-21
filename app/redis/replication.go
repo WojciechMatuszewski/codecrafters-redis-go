@@ -8,6 +8,12 @@ import (
 	"strings"
 )
 
+type replica struct {
+	host       string
+	port       string
+	connection net.Conn
+}
+
 type ReplicationInfo struct {
 	MasterHost string
 	MasterPort string
@@ -15,28 +21,35 @@ type ReplicationInfo struct {
 	Host string
 	Port string
 
-	Replicas []string
-
 	ReplId     string
 	ReplOffset string
 	Role       string
 }
 
+func (ri *ReplicationInfo) MasterAddress() string {
+	if ri.MasterHost == "" || ri.MasterPort == "" {
+		return ""
+	}
+
+	return fmt.Sprintf("%s:%s", ri.MasterHost, ri.MasterPort)
+}
+
 type Replicator interface {
-	Connect(ctx context.Context) error
-	Handle(cmd Command) ([]Value, error)
-	Replicate(cmd Command) error
+	Handle(ctx context.Context, cmd Command) ([]Value, error)
+	Replicate(ctx context.Context, cmd Command) error
+	ConnectMaster(ctx context.Context) error
+	Role() string
 }
 
 type ServerReplicator struct {
-	info *ReplicationInfo
+	info     *ReplicationInfo
+	replicas []replica
 }
 
 func NewServerReplicator(host string, port string, replicaof string) Replicator {
 	info := &ReplicationInfo{
 		ReplOffset: "0",
 		ReplId:     "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb",
-		Replicas:   []string{},
 		MasterHost: "",
 		MasterPort: "",
 		Host:       host,
@@ -45,33 +58,61 @@ func NewServerReplicator(host string, port string, replicaof string) Replicator 
 	}
 
 	if replicaof == "" {
-		return &ServerReplicator{info: info}
+		return &ServerReplicator{info: info, replicas: []replica{}}
 	}
 
 	addressParts := strings.Split(replicaof, " ")
 	if len(addressParts) < 1 {
-		return &ServerReplicator{info: info}
+		return &ServerReplicator{info: info, replicas: []replica{}}
 	}
 
 	info.MasterHost = addressParts[0]
 	info.MasterPort = addressParts[1]
 	info.Role = "slave"
 
-	return &ServerReplicator{info: info}
+	return &ServerReplicator{info: info, replicas: []replica{}}
 }
 
-func (sr *ServerReplicator) Replicate(cmd Command) error {
-	return nil
+func (sr *ServerReplicator) Role() string {
+	return sr.info.Role
 }
 
-func (sr *ServerReplicator) Handle(cmd Command) ([]Value, error) {
+func (sr *ServerReplicator) Replicate(ctx context.Context, cmd Command) error {
 	switch cmd.Type {
-	case ReplicaConf:
-		if cmd.Args[0] == "listening-port" {
-			sr.info.Replicas = append(sr.info.Replicas, fmt.Sprintf("%s:%s", sr.info.Host, cmd.Args[1]))
+	case Set:
+		fmt.Printf("Replicating %v command\n", cmd)
+
+		for _, replica := range sr.replicas {
+			err := cmd.Write(replica.connection)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
+func (sr *ServerReplicator) Handle(ctx context.Context, cmd Command) ([]Value, error) {
+	switch cmd.Type {
+	case ReplConf:
+		if cmd.Args[0] != "listening-port" {
 			return []Value{{Type: SimpleString, SimpleString: "OK"}}, nil
 		}
+
+		host := sr.info.Host
+		port := cmd.Args[1]
+		address := fmt.Sprintf("%s:%s", host, port)
+
+		connection, err := connect(ctx, address)
+		if err != nil {
+			return nil, err
+		}
+		sr.replicas = append(sr.replicas, replica{host: host, port: port, connection: connection})
+
 		return []Value{{Type: SimpleString, SimpleString: "OK"}}, nil
+
 	case Info:
 		info := fmt.Sprintf("role:%s\nmaster_replid:%s\nmaster_repl_offset:%s", sr.info.Role, sr.info.ReplId, sr.info.ReplOffset)
 		return []Value{{Type: Bulk, Bulk: info}}, nil
@@ -95,154 +136,119 @@ func (sr *ServerReplicator) Handle(cmd Command) ([]Value, error) {
 	return []Value{}, fmt.Errorf("unknown replication command: %v", cmd)
 }
 
-func (sr *ServerReplicator) Connect(ctx context.Context) error {
-	if sr.info.MasterHost == "" || sr.info.MasterPort == "" {
+func (sr *ServerReplicator) ConnectMaster(ctx context.Context) error {
+	address := sr.info.MasterAddress()
+	if address == "" {
+		fmt.Println("Master address is empty. skipping connection")
 		return nil
 	}
 
-	address := fmt.Sprintf("%s:%s", sr.info.MasterHost, sr.info.MasterPort)
-	fmt.Printf("Connecting to address: %s\n", address)
-
-	dialer := net.Dialer{}
-	conn, err := dialer.DialContext(ctx, "tcp", address)
+	connection, err := connect(ctx, address)
 	if err != nil {
 		return fmt.Errorf("failed to connect to address: %s, %w", address, err)
 	}
 
-	// err = s.handleHandshake(ctx, conn)
-	// if err != nil {
-	// 	return nil, err
-	// }
+	{
+		value := Value{Type: Array, Array: []Value{
+			{Type: Bulk, Bulk: "PING"},
+		}}
+		fmt.Printf("Sending to master: %q\n", value.Format())
 
-	err = Write(conn, FormatArray(
-		FormatBulkString("PING"),
-	))
-	if err != nil {
-		return err
+		err := value.Write(connection)
+		if err != nil {
+			return fmt.Errorf("failed to write to master: %w", err)
+		}
+
+		buf := make([]byte, 1024)
+		n, err := connection.Read(buf)
+		if err != nil {
+			return fmt.Errorf("failed to read %w", err)
+		}
+
+		fmt.Printf("Master responded with: %q\n", string(buf[0:n]))
 	}
 
-	// client.Handle(ctx, conn, s.replicator)
+	{
 
-	err = Write(conn, FormatArray(
-		FormatBulkString("REPLCONF"),
-		FormatBulkString("listening-port"),
-		FormatBulkString(sr.info.Port),
-	))
-	if err != nil {
-		return err
+		value := Value{Type: Array, Array: []Value{
+			{Type: Bulk, Bulk: "REPLCONF"},
+			{Type: Bulk, Bulk: "listening-port"},
+			{Type: Bulk, Bulk: sr.info.Port},
+		}}
+		fmt.Printf("Sending to master: %q\n", value.Format())
+
+		data := []byte(value.Format())
+		_, err := connection.Write(data)
+		if err != nil {
+			return fmt.Errorf("failed to write to master: %w", err)
+		}
+
+		buf := make([]byte, 1024)
+		n, err := connection.Read(buf)
+		if err != nil {
+			return fmt.Errorf("failed to read %w", err)
+		}
+
+		fmt.Println("Master responded with", string(buf[0:n]))
 	}
 
-	// client.Handle(ctx, conn, s.replicator)
+	{
 
-	err = Write(conn, FormatArray(
-		FormatBulkString("REPLCONF"),
-		FormatBulkString("capa"),
-		FormatBulkString("psync2"),
-	))
-	if err != nil {
-		return err
+		value := Value{Type: Array, Array: []Value{
+			{Type: Bulk, Bulk: "REPLCONF"},
+			{Type: Bulk, Bulk: "capa"},
+			{Type: Bulk, Bulk: "psync2"},
+		}}
+		fmt.Printf("Sending to master: %q\n", value.Format())
+
+		err = value.Write(connection)
+		if err != nil {
+			return fmt.Errorf("failed to write to master: %w", err)
+		}
+
+		buf := make([]byte, 1024)
+		n, err := connection.Read(buf)
+		if err != nil {
+			return fmt.Errorf("failed to read %w", err)
+		}
+
+		fmt.Println("Master responded with", string(buf[0:n]))
 	}
 
-	// client.Handle(ctx, conn, s.replicator)
+	{
 
-	err = Write(conn, FormatArray(
-		FormatBulkString("PSYNC"),
-		FormatBulkString("?"),
-		FormatBulkString("-1"),
-	))
+		value := Value{Type: Array, Array: []Value{
+			{Type: Bulk, Bulk: "PSYNC"},
+			{Type: Bulk, Bulk: "?"},
+			{Type: Bulk, Bulk: "-1"},
+		}}
+		fmt.Printf("Sending to master: %q\n", value.Format())
 
-	return err
+		err := value.Write(connection)
+		if err != nil {
+			return fmt.Errorf("failed to write to master: %w", err)
+		}
+
+		buf := make([]byte, 1024)
+		n, err := connection.Read(buf)
+		if err != nil {
+			return fmt.Errorf("failed to read %w", err)
+		}
+
+		fmt.Println("Master responded with", string(buf[0:n]))
+	}
+
+	return nil
 }
 
-// func (sr *ServerReplicator) Handle(ctx context.Context, rw io.ReadWriter) {
-// 	buf := make([]byte, 1024)
-// 	n, err := rw.Read(buf)
-// 	if err != nil {
-// 		if errors.Is(err, io.EOF) {
-// 			return
-// 		}
+func connect(ctx context.Context, address string) (net.Conn, error) {
+	fmt.Printf("Connecting to address at: %s\n", address)
 
-// 		panic(err)
-// 	}
-// 	input := buf[:n]
+	dialer := net.Dialer{}
+	connection, err := dialer.DialContext(ctx, "tcp", address)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to address: %s, %w", address, err)
+	}
 
-// 	fmt.Printf("Received input: %q\n", string(input))
-
-// 	message := ParseMessage(input)
-// 	switch message.Type {
-// 	case Info:
-// 		err := sr.handleInfo(rw)
-// 		if err != nil {
-// 			log.Printf("Error handling %s command: %v", message.Type, err)
-// 			return
-// 		}
-
-// 	case ReplicaConf:
-// 		err := sr.handleReplicaConf(rw)
-// 		if err != nil {
-// 			log.Printf("Error handling %s command: %v", message.Type, err)
-// 			return
-// 		}
-
-// 	case PSync:
-// 		err = sr.handlePSync(rw)
-// 		if err != nil {
-// 			log.Printf("Error handling %s command: %v", message.Type, err)
-// 			return
-// 		}
-// 	}
-// }
-
-// func (sr *ServerReplicator) handleInfo(w io.Writer) error {
-// 	err := WriteBulkString(w, fmt.Sprintf("role:%s\nmaster_replid:%s\nmaster_repl_offset:%s", sr.info.Role, sr.info.ReplId, sr.info.ReplOffset))
-// 	return err
-// }
-
-// func (sr *ServerReplicator) handleReplicaConf(w io.Writer) error {
-// 	err := WriteSimpleString(w, "OK")
-// 	return err
-// }
-
-// func (sr *ServerReplicator) HandleHandshake(ctx context.Context, conn net.Conn) error {
-// 	err := Write(conn, FormatArray(
-// 		FormatBulkString("PING"),
-// 	))
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	s.client.Handle(ctx, conn, s.replicator)
-
-// 	err = Write(conn, FormatArray(
-// 		FormatBulkString("REPLCONF"),
-// 		FormatBulkString("listening-port"),
-// 		FormatBulkString(s.Port),
-// 	))
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	s.client.Handle(ctx, conn, s.replicator)
-
-// 	err = Write(conn, FormatArray(
-// 		FormatBulkString("REPLCONF"),
-// 		FormatBulkString("capa"),
-// 		FormatBulkString("psync2"),
-// 	))
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	s.client.Handle(ctx, conn, s.replicator)
-
-// 	err = Write(conn, FormatArray(
-// 		FormatBulkString("PSYNC"),
-// 		FormatBulkString("?"),
-// 		FormatBulkString("-1"),
-// 	))
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	return nil
-// }
+	return connection, nil
+}
