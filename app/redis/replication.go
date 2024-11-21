@@ -101,15 +101,17 @@ func (sr *ServerReplicator) Handle(ctx context.Context, cmd Command) ([]Value, e
 			return []Value{{Type: SimpleString, SimpleString: "OK"}}, nil
 		}
 
-		// host := sr.info.Host
-		// port := cmd.Args[1]
-		// address := fmt.Sprintf("%s:%s", host, port)
+		if sr.info.Role == "master" {
+			host := sr.info.Host
+			port := cmd.Args[1]
+			address := fmt.Sprintf("%s:%s", host, port)
 
-		// connection, err := connect(ctx, address)
-		// if err != nil {
-		// 	return nil, err
-		// }
-		// sr.replicas = append(sr.replicas, replica{host: host, port: port, connection: connection})
+			connection, err := connect(ctx, address)
+			if err != nil {
+				return nil, err
+			}
+			sr.replicas = append(sr.replicas, replica{host: host, port: port, connection: connection})
+		}
 
 		return []Value{{Type: SimpleString, SimpleString: "OK"}}, nil
 
