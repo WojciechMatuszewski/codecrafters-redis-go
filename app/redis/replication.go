@@ -101,7 +101,7 @@ func (sr *ServerReplicator) Handle(ctx context.Context, cmd Command) ([]Value, e
 			return []Value{{Type: SimpleString, SimpleString: "OK"}}, nil
 		}
 
-		host := sr.info.Host
+		host := sr.info.MasterHost
 		port := cmd.Args[1]
 		address := fmt.Sprintf("%s:%s", host, port)
 
