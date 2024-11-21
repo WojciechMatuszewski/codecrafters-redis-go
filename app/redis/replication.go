@@ -101,7 +101,7 @@ func (sr *ServerReplicator) Handle(ctx context.Context, cmd Command) ([]Value, e
 			return []Value{{Type: SimpleString, SimpleString: "OK"}}, nil
 		}
 
-		host := sr.info.MasterHost
+		host := sr.info.Host
 		port := cmd.Args[1]
 		address := fmt.Sprintf("%s:%s", host, port)
 
@@ -147,6 +147,7 @@ func (sr *ServerReplicator) ConnectMaster(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to address: %s, %w", address, err)
 	}
+	defer connection.Close()
 
 	{
 		value := Value{Type: Array, Array: []Value{
