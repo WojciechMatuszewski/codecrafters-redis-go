@@ -143,6 +143,8 @@ func (sr *ServerReplicator) ConnectMaster(ctx context.Context) error {
 		return nil
 	}
 
+	fmt.Println("Connecting to master")
+
 	connection, err := connect(ctx, address)
 	if err != nil {
 		return fmt.Errorf("failed to connect to address: %s, %w", address, err)
