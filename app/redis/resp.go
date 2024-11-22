@@ -39,6 +39,9 @@ type Value struct {
 func (v Value) Format() string {
 	switch v.Type {
 	case Bulk:
+		if v.Bulk == "-1" {
+			return "$-1\r\n"
+		}
 		return FormatBulkString(v.Bulk)
 	case Array:
 		elements := make([]string, len(v.Array))
