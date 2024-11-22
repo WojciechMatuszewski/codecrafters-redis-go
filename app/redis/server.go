@@ -23,8 +23,8 @@ type Server struct {
 	MasterHost string
 	MasterPort string
 
-	client   *Client
-	replicas []net.Conn
+	client *Client
+	slaves []net.Conn
 }
 
 func NewServer(client *Client, host string, masterHost string, port string, masterPort string) *Server {
@@ -34,8 +34,8 @@ func NewServer(client *Client, host string, masterHost string, port string, mast
 		MasterHost: masterHost,
 		MasterPort: masterPort,
 
-		client:   client,
-		replicas: []net.Conn{},
+		client: client,
+		slaves: []net.Conn{},
 	}
 }
 
@@ -239,7 +239,7 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 			switch cmd.Type {
 			case ReplConf:
 				if cmd.Args[0] == "listening-port" {
-					s.replicas = append(s.replicas, connection)
+					s.slaves = append(s.slaves, connection)
 				}
 
 				value := Value{Type: SimpleString, SimpleString: "OK"}
@@ -248,7 +248,7 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 					fmt.Println("Failed to write", err)
 				}
 			case Info:
-				info := fmt.Sprintf("role:%s\nmaster_replid:%s\nmaster_repl_offset:%s", "master", "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb", "0")
+				info := fmt.Sprintf("role:%s\nmaster_replid:%s\nmaster_repl_offset:%s", s.role(), "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb", "0")
 				value := Value{Type: Bulk, Bulk: info}
 				err := value.Write(connection)
 				if err != nil {
@@ -316,14 +316,14 @@ func (s *Server) role() string {
 		return "master"
 	}
 
-	return "replica"
+	return "slave"
 }
 
 func (s *Server) replicate(cmd Command) error {
 	switch cmd.Type {
 	case Set:
 		fmt.Printf("Replicating %v command\n", cmd)
-		for _, replica := range s.replicas {
+		for _, replica := range s.slaves {
 			err := cmd.Write(replica)
 			if err != nil {
 				return err
