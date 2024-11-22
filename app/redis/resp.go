@@ -22,6 +22,7 @@ type ValueType string
 
 const (
 	Bulk         ValueType = "bulk"
+	NullBulk     ValueType = "nullBulk"
 	Array        ValueType = "array"
 	SimpleString ValueType = "string"
 	Raw          ValueType = "raw"
@@ -39,10 +40,9 @@ type Value struct {
 func (v Value) Format() string {
 	switch v.Type {
 	case Bulk:
-		if v.Bulk == "-1" {
-			return "$-1\r\n"
-		}
 		return FormatBulkString(v.Bulk)
+	case NullBulk:
+		return FormatNullBulkString()
 	case Array:
 		elements := make([]string, len(v.Array))
 		for i := 0; i < len(v.Array); i++ {

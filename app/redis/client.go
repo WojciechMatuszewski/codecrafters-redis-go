@@ -23,7 +23,7 @@ func (c *Client) Handle(cmd Command) (Value, error) {
 		key := cmd.Args[0]
 		value, found := c.store.Get(key)
 		if !found {
-			return Value{Type: Bulk, Bulk: "-1"}, nil
+			return Value{Type: NullBulk}, nil
 		}
 		return Value{Type: Bulk, Bulk: value}, nil
 
