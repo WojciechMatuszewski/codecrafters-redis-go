@@ -259,7 +259,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to read %w", err)
 		}
 
-		fmt.Println("Master responded with", string(buf[0:n]))
+		fmt.Printf("Master responded with: %q\n", string(buf[0:n]))
 	}
 
 	{
@@ -282,7 +282,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to read %w", err)
 		}
 
-		fmt.Println("Master responded with", string(buf[0:n]))
+		fmt.Printf("Master responded with: %q\n", string(buf[0:n]))
 	}
 
 	{
@@ -305,7 +305,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to read %w", err)
 		}
 
-		fmt.Println("Master responded with", string(buf[0:n]))
+		fmt.Printf("Master responded with: %q\n", string(buf[0:n]))
 	}
 
 	return nil
