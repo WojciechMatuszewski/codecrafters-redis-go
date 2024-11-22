@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"os"
 	"os/signal"
 	"syscall"
 )
@@ -25,10 +26,12 @@ type Server struct {
 
 	client *Client
 	slaves []net.Conn
+
+	logger *log.Logger
 }
 
 func NewServer(client *Client, host string, masterHost string, port string, masterPort string) *Server {
-	return &Server{
+	server := &Server{
 		Host:       host,
 		Port:       port,
 		MasterHost: masterHost,
@@ -37,6 +40,10 @@ func NewServer(client *Client, host string, masterHost string, port string, mast
 		client: client,
 		slaves: []net.Conn{},
 	}
+	logger := log.New(os.Stdout, fmt.Sprintf("[%s on %s:%s] ", server.role(), server.Host, server.Port), 0)
+	server.logger = logger
+
+	return server
 }
 
 func (s *Server) Address() string {
@@ -44,7 +51,7 @@ func (s *Server) Address() string {
 }
 
 func (s *Server) ListenAndServe(ctx context.Context) error {
-	fmt.Printf("Starting the server: %s\n", s.Address())
+	s.logger.Print("Starting the server")
 
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -79,7 +86,7 @@ func (s *Server) listen(ctx context.Context, address string) (net.Listener, erro
 }
 
 func (s *Server) serve(ctx context.Context, listener net.Listener) {
-	fmt.Printf("Accepting connection on address: %s\n", listener.Addr())
+	s.logger.Println("Accepting connections")
 
 	for {
 		select {
@@ -98,7 +105,7 @@ func (s *Server) serve(ctx context.Context, listener net.Listener) {
 				continue
 			}
 
-			fmt.Printf("New connection to the server: %s\n", connection.RemoteAddr())
+			s.logger.Printf("New connection to the server: %s\n", connection.RemoteAddr())
 
 			go s.handleLoop(ctx, connection)
 
@@ -126,7 +133,7 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 
 			cmd := NewCommand(value)
 
-			fmt.Printf("Handling command: %q\n", cmd.value.Format())
+			s.logger.Printf("Handling command: %q\n", cmd.value.Format())
 
 			switch cmd.Type {
 			case ReplConf:
@@ -154,7 +161,7 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 				}
 				err := resyncValue.Write(connection)
 				if err != nil {
-					fmt.Println("Failed to write", err)
+					s.logger.Println("Failed to write", err)
 				}
 
 				b64RDB := "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog=="
@@ -165,37 +172,37 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 				rdbValue := Value{Type: Raw, Raw: fmt.Sprintf("$%v\r\n%s", len(rdbData), rdbData)}
 				err = rdbValue.Write(connection)
 				if err != nil {
-					fmt.Println("Failed to write", err)
+					s.logger.Println("Failed to write", err)
 				}
 
 			default:
 				outValue, err := s.client.Handle(cmd)
 				if err != nil {
-					log.Fatalf("failed to handle client command: %v", err)
+					s.logger.Fatalf("failed to handle client command: %v", err)
 				}
 
 				if err != nil {
-					log.Fatalf("failed to replicate command %v", cmd)
+					s.logger.Fatalf("failed to replicate command %v", cmd)
 				}
 
 				if s.role() == "master" {
-					fmt.Println("Replicating", cmd)
+					s.logger.Printf("Replicating: %q\n", cmd.value.Format())
 					err := s.replicate(cmd)
 					if err != nil {
-						fmt.Println("Failed to replicate", err)
+						s.logger.Println("Failed to replicate", err)
 					}
 				}
 
 				if s.role() == "replica" {
-					fmt.Println("Running as replica. Skipping the response")
+					s.logger.Println("Skipping the response")
 					return
 				}
 
-				fmt.Printf("Responding with: %q\n", outValue.Format())
+				s.logger.Printf("Responding with: %q\n", outValue.Format())
 
 				_, err = connection.Write([]byte(outValue.Format()))
 				if err != nil {
-					log.Fatalf("failed to respond to client command: %v", err)
+					s.logger.Fatalf("failed to respond to client command: %v", err)
 				}
 			}
 
@@ -209,7 +216,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 	}
 
 	address := fmt.Sprintf("%s:%s", s.MasterHost, s.MasterPort)
-	fmt.Printf("Connecting to address at: %s\n", address)
+	s.logger.Printf("Connecting to address at: %s\n", address)
 
 	dialer := net.Dialer{}
 	connection, err := dialer.DialContext(ctx, "tcp", address)
@@ -222,7 +229,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 		value := Value{Type: Array, Array: []Value{
 			{Type: Bulk, Bulk: "PING"},
 		}}
-		fmt.Printf("Sending to master: %q\n", value.Format())
+		s.logger.Printf("Sending to master: %q\n", value.Format())
 
 		err := value.Write(connection)
 		if err != nil {
@@ -235,7 +242,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to read %w", err)
 		}
 
-		fmt.Printf("Master responded with: %q\n", string(buf[0:n]))
+		s.logger.Printf("Master responded with: %q\n", string(buf[0:n]))
 	}
 
 	{
@@ -245,7 +252,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			{Type: Bulk, Bulk: "listening-port"},
 			{Type: Bulk, Bulk: s.Port},
 		}}
-		fmt.Printf("Sending to master: %q\n", value.Format())
+		s.logger.Printf("Sending to master: %q\n", value.Format())
 
 		data := []byte(value.Format())
 		_, err := connection.Write(data)
@@ -259,7 +266,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to read %w", err)
 		}
 
-		fmt.Printf("Master responded with: %q\n", string(buf[0:n]))
+		s.logger.Printf("Master responded with: %q\n", string(buf[0:n]))
 	}
 
 	{
@@ -269,7 +276,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			{Type: Bulk, Bulk: "capa"},
 			{Type: Bulk, Bulk: "psync2"},
 		}}
-		fmt.Printf("Sending to master: %q\n", value.Format())
+		s.logger.Printf("Sending to master: %q\n", value.Format())
 
 		err = value.Write(connection)
 		if err != nil {
@@ -282,7 +289,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to read %w", err)
 		}
 
-		fmt.Printf("Master responded with: %q\n", string(buf[0:n]))
+		s.logger.Printf("Master responded with: %q\n", string(buf[0:n]))
 	}
 
 	{
@@ -292,7 +299,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			{Type: Bulk, Bulk: "?"},
 			{Type: Bulk, Bulk: "-1"},
 		}}
-		fmt.Printf("Sending to master: %q\n", value.Format())
+		s.logger.Printf("Sending to master: %q\n", value.Format())
 
 		err := value.Write(connection)
 		if err != nil {
@@ -305,7 +312,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to read %w", err)
 		}
 
-		fmt.Printf("Master responded with: %q\n", string(buf[0:n]))
+		s.logger.Printf("Master responded with: %q\n", string(buf[0:n]))
 	}
 
 	return nil
