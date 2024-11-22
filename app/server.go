@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"log"
+	"strings"
 
 	"github.com/codecrafters-io/redis-starter-go/app/redis"
 )
@@ -21,10 +22,16 @@ var (
 func main() {
 	flag.Parse()
 
-	client := redis.NewClient(redis.NewInMemoryStore())
-	replicator := redis.NewServerReplicator(host, *port, *replicaof)
+	masterHost := ""
+	masterPort := ""
+	if *replicaof != "" {
+		addressParts := strings.Split(*replicaof, " ")
+		masterHost = addressParts[0]
+		masterPort = addressParts[1]
+	}
 
-	server := redis.NewServer(client, replicator, host, *port)
+	client := redis.NewClient(redis.NewInMemoryStore())
+	server := redis.NewServer(client, host, masterHost, *port, masterPort)
 	err := server.ListenAndServe(context.Background())
 	if err != nil {
 		log.Fatalln("Server error:", err)

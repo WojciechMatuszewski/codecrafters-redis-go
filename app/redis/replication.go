@@ -37,7 +37,7 @@ func (ri *ReplicationInfo) MasterAddress() string {
 type Replicator interface {
 	Handle(ctx context.Context, cmd Command) ([]Value, error)
 	Replicate(ctx context.Context, cmd Command) error
-	ConnectMaster(ctx context.Context) error
+	MasterHandshake(ctx context.Context) error
 	Role() string
 }
 
@@ -81,7 +81,6 @@ func (sr *ServerReplicator) Replicate(ctx context.Context, cmd Command) error {
 	switch cmd.Type {
 	case Set:
 		fmt.Printf("Replicating %v command\n", cmd)
-
 		for _, replica := range sr.replicas {
 			err := cmd.Write(replica.connection)
 			if err != nil {
@@ -97,24 +96,7 @@ func (sr *ServerReplicator) Replicate(ctx context.Context, cmd Command) error {
 func (sr *ServerReplicator) Handle(ctx context.Context, cmd Command) ([]Value, error) {
 	switch cmd.Type {
 	case ReplConf:
-		if cmd.Args[0] != "listening-port" {
-			return []Value{{Type: SimpleString, SimpleString: "OK"}}, nil
-		}
-
-		if sr.info.Role == "master" {
-			host := sr.info.Host
-			port := cmd.Args[1]
-			address := fmt.Sprintf("%s:%s", host, port)
-
-			connection, err := connect(ctx, address)
-			if err != nil {
-				return nil, err
-			}
-			sr.replicas = append(sr.replicas, replica{host: host, port: port, connection: connection})
-		}
-
 		return []Value{{Type: SimpleString, SimpleString: "OK"}}, nil
-
 	case Info:
 		info := fmt.Sprintf("role:%s\nmaster_replid:%s\nmaster_repl_offset:%s", sr.info.Role, sr.info.ReplId, sr.info.ReplOffset)
 		return []Value{{Type: Bulk, Bulk: info}}, nil
@@ -138,13 +120,12 @@ func (sr *ServerReplicator) Handle(ctx context.Context, cmd Command) ([]Value, e
 	return []Value{}, fmt.Errorf("unknown replication command: %v", cmd)
 }
 
-func (sr *ServerReplicator) ConnectMaster(ctx context.Context) error {
-	address := sr.info.MasterAddress()
-	if address == "" {
-		fmt.Println("Master address is empty. skipping connection")
+func (sr *ServerReplicator) MasterHandshake(ctx context.Context) error {
+	if sr.info.Role == "master" {
 		return nil
 	}
 
+	address := sr.info.MasterAddress()
 	connection, err := connect(ctx, address)
 	if err != nil {
 		return fmt.Errorf("failed to connect to address: %s, %w", address, err)

@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -16,19 +17,25 @@ const (
 )
 
 type Server struct {
-	Host       string
-	Port       string
-	client     *Client
-	replicator Replicator
+	Host string
+	Port string
+
+	MasterHost string
+	MasterPort string
+
+	client   *Client
+	replicas []net.Conn
 }
 
-func NewServer(client *Client, replicator Replicator, host string, port string) *Server {
+func NewServer(client *Client, host string, masterHost string, port string, masterPort string) *Server {
 	return &Server{
-		Host: host,
-		Port: port,
+		Host:       host,
+		Port:       port,
+		MasterHost: masterHost,
+		MasterPort: masterPort,
 
-		client:     client,
-		replicator: replicator,
+		client:   client,
+		replicas: []net.Conn{},
 	}
 }
 
@@ -48,7 +55,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	}
 	go s.serve(ctx, listener)
 
-	err = s.replicator.ConnectMaster(ctx)
+	err = s.masterHandshake(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to connect to master: %w", err)
 	}
@@ -99,6 +106,114 @@ func (s *Server) serve(ctx context.Context, listener net.Listener) {
 	}
 }
 
+func (s *Server) masterHandshake(ctx context.Context) error {
+	if s.MasterHost == "" || s.MasterPort == "" {
+		return nil
+	}
+
+	address := fmt.Sprintf("%s:%s", s.MasterHost, s.MasterPort)
+	fmt.Printf("Connecting to address at: %s\n", address)
+
+	dialer := net.Dialer{}
+	connection, err := dialer.DialContext(ctx, "tcp", address)
+	if err != nil {
+		return fmt.Errorf("failed to connect to address: %s, %w", address, err)
+	}
+	defer connection.Close()
+
+	{
+		value := Value{Type: Array, Array: []Value{
+			{Type: Bulk, Bulk: "PING"},
+		}}
+		fmt.Printf("Sending to master: %q\n", value.Format())
+
+		err := value.Write(connection)
+		if err != nil {
+			return fmt.Errorf("failed to write to master: %w", err)
+		}
+
+		buf := make([]byte, 1024)
+		n, err := connection.Read(buf)
+		if err != nil {
+			return fmt.Errorf("failed to read %w", err)
+		}
+
+		fmt.Printf("Master responded with: %q\n", string(buf[0:n]))
+	}
+
+	{
+
+		value := Value{Type: Array, Array: []Value{
+			{Type: Bulk, Bulk: "REPLCONF"},
+			{Type: Bulk, Bulk: "listening-port"},
+			{Type: Bulk, Bulk: s.Port},
+		}}
+		fmt.Printf("Sending to master: %q\n", value.Format())
+
+		data := []byte(value.Format())
+		_, err := connection.Write(data)
+		if err != nil {
+			return fmt.Errorf("failed to write to master: %w", err)
+		}
+
+		buf := make([]byte, 1024)
+		n, err := connection.Read(buf)
+		if err != nil {
+			return fmt.Errorf("failed to read %w", err)
+		}
+
+		fmt.Println("Master responded with", string(buf[0:n]))
+	}
+
+	{
+
+		value := Value{Type: Array, Array: []Value{
+			{Type: Bulk, Bulk: "REPLCONF"},
+			{Type: Bulk, Bulk: "capa"},
+			{Type: Bulk, Bulk: "psync2"},
+		}}
+		fmt.Printf("Sending to master: %q\n", value.Format())
+
+		err = value.Write(connection)
+		if err != nil {
+			return fmt.Errorf("failed to write to master: %w", err)
+		}
+
+		buf := make([]byte, 1024)
+		n, err := connection.Read(buf)
+		if err != nil {
+			return fmt.Errorf("failed to read %w", err)
+		}
+
+		fmt.Println("Master responded with", string(buf[0:n]))
+	}
+
+	{
+
+		value := Value{Type: Array, Array: []Value{
+			{Type: Bulk, Bulk: "PSYNC"},
+			{Type: Bulk, Bulk: "?"},
+			{Type: Bulk, Bulk: "-1"},
+		}}
+		fmt.Printf("Sending to master: %q\n", value.Format())
+
+		err := value.Write(connection)
+		if err != nil {
+			return fmt.Errorf("failed to write to master: %w", err)
+		}
+
+		buf := make([]byte, 1024)
+		n, err := connection.Read(buf)
+		if err != nil {
+			return fmt.Errorf("failed to read %w", err)
+		}
+
+		fmt.Println("Master responded with", string(buf[0:n]))
+	}
+
+	return nil
+}
+
 func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 	defer connection.Close()
 	resp := NewResp(connection)
@@ -122,41 +237,43 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 			fmt.Println("Handling command", cmd)
 
 			switch cmd.Type {
-			case Info:
-				outValues, err := s.replicator.Handle(ctx, cmd)
-				if err != nil {
-					log.Fatalf("failed to handle replicator command: %v", err)
-				}
-
-				for _, outValue := range outValues {
-					_, err = connection.Write([]byte(outValue.Format()))
-					if err != nil {
-						log.Fatalf("failed to respond to client command: %v", err)
-					}
-				}
 			case ReplConf:
-				outValues, err := s.replicator.Handle(ctx, cmd)
-				if err != nil {
-					log.Fatalf("failed to handle replicator command: %v", err)
+				if cmd.Args[0] == "listening-port" {
+					s.replicas = append(s.replicas, connection)
 				}
 
-				for _, outValue := range outValues {
-					_, err = connection.Write([]byte(outValue.Format()))
-					if err != nil {
-						log.Fatalf("failed to respond to client command: %v", err)
-					}
+				value := Value{Type: SimpleString, SimpleString: "OK"}
+				err := value.Write(connection)
+				if err != nil {
+					fmt.Println("Failed to write", err)
+				}
+			case Info:
+				info := fmt.Sprintf("role:%s\nmaster_replid:%s\nmaster_repl_offset:%s", "master", "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb", "0")
+				value := Value{Type: Bulk, Bulk: info}
+				err := value.Write(connection)
+				if err != nil {
+					fmt.Println("Failed to write", err)
 				}
 			case PSync:
-				outValues, err := s.replicator.Handle(ctx, cmd)
+				data := fmt.Sprintf("FULLRESYNC %s %s", "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb", "0")
+				resyncValue := Value{
+					Type:         SimpleString,
+					SimpleString: data,
+				}
+				err := resyncValue.Write(connection)
 				if err != nil {
-					log.Fatalf("failed to handle replicator command: %v", err)
+					fmt.Println("Failed to write", err)
 				}
 
-				for _, outValue := range outValues {
-					_, err = connection.Write([]byte(outValue.Format()))
-					if err != nil {
-						log.Fatalf("failed to respond to client command: %v", err)
-					}
+				b64RDB := "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog=="
+				rdbData, err := base64.StdEncoding.DecodeString(b64RDB)
+				if err != nil {
+					return
+				}
+				rdbValue := Value{Type: Raw, Raw: fmt.Sprintf("$%v\r\n%s", len(rdbData), rdbData)}
+				err = rdbValue.Write(connection)
+				if err != nil {
+					fmt.Println("Failed to write", err)
 				}
 
 			default:
@@ -165,13 +282,20 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 					log.Fatalf("failed to handle client command: %v", err)
 				}
 
-				err = s.replicator.Replicate(ctx, cmd)
 				if err != nil {
 					log.Fatalf("failed to replicate command %v", cmd)
 				}
 
-				if s.replicator.Role() == "slave" {
-					fmt.Printf("Server is a replica. Skipping the response\n")
+				if s.role() == "master" {
+					fmt.Println("Replicating", cmd)
+					err := s.replicate(cmd)
+					if err != nil {
+						fmt.Println("Failed to replicate", err)
+					}
+				}
+
+				if s.role() == "replica" {
+					fmt.Println("Running as replica. Skipping the response")
 					return
 				}
 
@@ -182,6 +306,31 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 					log.Fatalf("failed to respond to client command: %v", err)
 				}
 			}
+
 		}
+	}
+}
+
+func (s *Server) role() string {
+	if s.MasterHost == "" || s.MasterPort == "" {
+		return "master"
+	}
+
+	return "replica"
+}
+
+func (s *Server) replicate(cmd Command) error {
+	switch cmd.Type {
+	case Set:
+		fmt.Printf("Replicating %v command\n", cmd)
+		for _, replica := range s.replicas {
+			err := cmd.Write(replica)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return nil
 	}
 }
