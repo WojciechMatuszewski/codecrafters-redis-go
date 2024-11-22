@@ -180,32 +180,6 @@ func (r *Resp) parseInteger(input []byte) (int64, error) {
 	return n, nil
 }
 
-// func Write(w io.Writer, output string) error {
-// 	_, err := w.Write([]byte(output))
-// 	return err
-// }
-
-// func WriteBulkString(w io.Writer, input string) error {
-// 	output := FormatBulkString(input)
-// 	_, err := w.Write([]byte(output))
-// 	return err
-// }
-
-// func WriteSimpleString(w io.Writer, input string) error {
-// 	output := FormatSimpleString(input)
-// 	_, err := w.Write([]byte(output))
-// 	return err
-// }
-
-// func WriteNullBulkString(w io.Writer) error {
-// 	output := FormatNullBulkString()
-// 	fmt.Printf("Responding with: %q\n", output)
-
-// 	_, err := w.Write([]byte(output))
-// 	fmt.Println("Responding with null bulk")
-// 	return err
-// }
-
 func FormatBulkString(input string) string {
 	return fmt.Sprintf("$%d\r\n%s\r\n", len(input), input)
 }
