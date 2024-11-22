@@ -126,7 +126,7 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 
 			cmd := NewCommand(value)
 
-			fmt.Println("Handling command", cmd)
+			fmt.Printf("Handling command: %q\n", cmd.value.Format())
 
 			switch cmd.Type {
 			case ReplConf:
@@ -191,7 +191,7 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 					return
 				}
 
-				fmt.Println("Responding with", outValue)
+				fmt.Printf("Responding with: %q\n", outValue.Format())
 
 				_, err = connection.Write([]byte(outValue.Format()))
 				if err != nil {
