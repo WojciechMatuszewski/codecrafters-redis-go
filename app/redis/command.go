@@ -17,6 +17,7 @@ const (
 	Pong     CommandType = "pong"
 	ReplConf CommandType = "replconf"
 	PSync    CommandType = "psync"
+	Ok       CommandType = "ok"
 )
 
 type Command struct {
