@@ -164,6 +164,11 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 					s.logger.Println("Failed to write", err)
 				}
 
+				_, err = resp.Read()
+				if err != nil {
+					s.logger.Println("Failed to read after writing full resync", err)
+				}
+
 				b64RDB := "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog=="
 				rdbData, err := base64.StdEncoding.DecodeString(b64RDB)
 				if err != nil {
@@ -173,6 +178,11 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 				err = rdbValue.Write(connection)
 				if err != nil {
 					s.logger.Println("Failed to write", err)
+				}
+
+				_, err = resp.Read()
+				if err != nil {
+					s.logger.Println("Failed to read after writing rdb file", err)
 				}
 
 			default:
