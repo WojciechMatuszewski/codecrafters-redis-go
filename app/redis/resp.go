@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"strconv"
 )
 
@@ -97,15 +96,21 @@ func (r *Resp) Read() (Value, error) {
 }
 
 func (r *Resp) readLine() ([]byte, error) {
-	buf, err := r.reader.ReadString('\n')
-	if err != nil {
-		return nil, fmt.Errorf("failed to read line: %w", err)
+	var line []byte
+
+	for {
+		b, err := r.reader.ReadByte()
+		if err != nil {
+			return nil, err
+		}
+
+		line = append(line, b)
+		if len(line) >= 2 && line[len(line)-2] == '\r' {
+			break
+		}
 	}
 
-	log.Printf("Read line %q\n", string(buf))
-
-	line := buf[:len(buf)-2]
-	return []byte(line), err
+	return line[:len(line)-2], nil
 }
 
 func (r *Resp) readBulk() (Value, error) {
