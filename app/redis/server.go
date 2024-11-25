@@ -227,7 +227,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 		return fmt.Errorf("failed to connect to address: %s, %w", address, err)
 	}
 
-	go s.handleLoop(ctx, connection)
+	// go s.handleLoop(ctx, connection)
 
 	resp := NewResp(connection)
 	{
@@ -322,6 +322,8 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 	}
 
 	s.logger.Println("Finished handshake")
+
+	go s.handleLoop(ctx, connection)
 
 	return nil
 }
