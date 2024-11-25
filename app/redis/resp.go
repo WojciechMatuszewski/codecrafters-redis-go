@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"strconv"
 )
 
@@ -100,6 +101,8 @@ func (r *Resp) readLine() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read line: %w", err)
 	}
+
+	log.Printf("Read line %q\n", string(buf))
 
 	line := buf[:len(buf)-2]
 	return []byte(line), err
