@@ -139,7 +139,6 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 			s.logger.Printf("Handling command: %q\n", cmd.value.Format())
 
 			switch cmd.Type {
-			case Ok:
 			case ReplConf:
 				if cmd.Args[0] == "listening-port" {
 					s.slaves = append(s.slaves, connection)
@@ -182,11 +181,12 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 			default:
 				outValue, err := s.client.Handle(cmd)
 				if err != nil {
-					s.logger.Fatalf("failed to handle client command: %v", err)
-				}
+					if errors.Is(err, ErrUnknownCommand) {
+						s.logger.Println("Unknown command")
+						return
+					}
 
-				if err != nil {
-					s.logger.Fatalf("failed to replicate command %v", cmd)
+					s.logger.Fatalf("failed to handle client command: %v", err)
 				}
 
 				if s.role() == "master" {

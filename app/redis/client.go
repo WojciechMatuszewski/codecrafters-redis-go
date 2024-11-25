@@ -1,8 +1,13 @@
 package redis
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
+)
+
+var (
+	ErrUnknownCommand = errors.New("unknown command")
 )
 
 type Client struct {
@@ -47,5 +52,5 @@ func (c *Client) Handle(cmd Command) (Value, error) {
 		return Value{Type: SimpleString, SimpleString: "OK"}, nil
 	}
 
-	return Value{}, fmt.Errorf("unknown command: %v", cmd)
+	return Value{}, fmt.Errorf("%w: %v", ErrUnknownCommand, cmd)
 }
