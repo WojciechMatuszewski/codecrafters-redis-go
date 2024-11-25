@@ -227,7 +227,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 		return fmt.Errorf("failed to connect to address: %s, %w", address, err)
 	}
 
-	go s.handleLoop(ctx, connection)
+	// go s.handleLoop(ctx, connection)
 
 	resp := NewResp(connection)
 	{
@@ -308,15 +308,22 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		resValue, err := resp.Read()
+		respFullResync, err := resp.Read()
 		if err != nil {
 			return fmt.Errorf("failed to read %w", err)
 		}
+		s.logger.Printf("Master responded with: %q\n", respFullResync.Format())
 
-		s.logger.Printf("Master responded with: %q\n", resValue.Format())
+		respRDB, err := resp.Read()
+		if err != nil {
+			return fmt.Errorf("failed to read %w", err)
+		}
+		s.logger.Printf("Master responded with: %q\n", respRDB.Format())
 	}
 
 	s.logger.Println("Finished handshake")
+
+	go s.handleLoop(ctx, connection)
 
 	return nil
 }
