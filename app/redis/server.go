@@ -114,6 +114,8 @@ func (s *Server) serve(ctx context.Context, listener net.Listener) {
 }
 
 func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
+	s.logger.Printf("Handing commands from connection: %s\n", connection.RemoteAddr())
+
 	defer connection.Close()
 	resp := NewResp(connection)
 
@@ -125,6 +127,7 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 			value, err := resp.Read()
 			if err != nil {
 				if errors.Is(err, io.EOF) {
+					s.logger.Println("EOF while reading from connection")
 					return
 				}
 
@@ -310,6 +313,8 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 
 		s.logger.Printf("Master responded with: %q\n", resValue.Format())
 	}
+
+	s.logger.Println("Finished handshake. Handling master connection")
 
 	go s.handleLoop(ctx, connection)
 
