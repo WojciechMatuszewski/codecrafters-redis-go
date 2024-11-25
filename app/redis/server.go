@@ -229,7 +229,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 
 	go s.handleLoop(ctx, connection)
 
-	// resp := NewResp(connection)
+	resp := NewResp(connection)
 	{
 		outValue := Value{Type: Array, Array: []Value{
 			{Type: Bulk, Bulk: "PING"},
@@ -241,12 +241,12 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		// resValue, err := resp.Read()
-		// if err != nil {
-		// 	return fmt.Errorf("failed to read %w", err)
-		// }
+		resValue, err := resp.Read()
+		if err != nil {
+			return fmt.Errorf("failed to read %w", err)
+		}
 
-		// s.logger.Printf("Master responded with: %q\n", resValue.Format())
+		s.logger.Printf("Master responded with: %q\n", resValue.Format())
 	}
 
 	{
@@ -264,12 +264,12 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		// resValue, err := resp.Read()
-		// if err != nil {
-		// 	return fmt.Errorf("failed to read %w", err)
-		// }
+		resValue, err := resp.Read()
+		if err != nil {
+			return fmt.Errorf("failed to read %w", err)
+		}
 
-		// s.logger.Printf("Master responded with: %q\n", resValue.Format())
+		s.logger.Printf("Master responded with: %q\n", resValue.Format())
 	}
 
 	{
@@ -286,12 +286,12 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		// resValue, err := resp.Read()
-		// if err != nil {
-		// 	return fmt.Errorf("failed to read %w", err)
-		// }
+		resValue, err := resp.Read()
+		if err != nil {
+			return fmt.Errorf("failed to read %w", err)
+		}
 
-		// s.logger.Printf("Master responded with: %q\n", resValue.Format())
+		s.logger.Printf("Master responded with: %q\n", resValue.Format())
 	}
 
 	{
@@ -308,15 +308,15 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		// resValue, err := resp.Read()
-		// if err != nil {
-		// 	return fmt.Errorf("failed to read %w", err)
-		// }
+		resValue, err := resp.Read()
+		if err != nil {
+			return fmt.Errorf("failed to read %w", err)
+		}
 
-		// s.logger.Printf("Master responded with: %q\n", resValue.Format())
+		s.logger.Printf("Master responded with: %q\n", resValue.Format())
 	}
 
-	// s.logger.Println("Finished handshake. Handling master connection")
+	s.logger.Println("Finished handshake")
 
 	return nil
 }
