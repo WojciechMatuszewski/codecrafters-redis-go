@@ -140,7 +140,6 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 
 			switch cmd.Type {
 			case Ok:
-				return
 			case ReplConf:
 				if cmd.Args[0] == "listening-port" {
 					s.slaves = append(s.slaves, connection)
