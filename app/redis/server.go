@@ -164,11 +164,6 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 					s.logger.Println("Failed to write", err)
 				}
 
-				_, err = resp.Read()
-				if err != nil {
-					s.logger.Println("Failed to read after writing full resync", err)
-				}
-
 				b64RDB := "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog=="
 				rdbData, err := base64.StdEncoding.DecodeString(b64RDB)
 				if err != nil {
@@ -178,11 +173,6 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 				err = rdbValue.Write(connection)
 				if err != nil {
 					s.logger.Println("Failed to write", err)
-				}
-
-				_, err = resp.Read()
-				if err != nil {
-					s.logger.Println("Failed to read after writing rdb file", err)
 				}
 
 			default:
@@ -235,94 +225,92 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 	}
 	defer connection.Close()
 
+	resp := NewResp(connection)
+
 	{
-		value := Value{Type: Array, Array: []Value{
+		outValue := Value{Type: Array, Array: []Value{
 			{Type: Bulk, Bulk: "PING"},
 		}}
-		s.logger.Printf("Sending to master: %q\n", value.Format())
+		s.logger.Printf("Sending to master: %q\n", outValue.Format())
 
-		err := value.Write(connection)
+		err := outValue.Write(connection)
 		if err != nil {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		buf := make([]byte, 1024)
-		n, err := connection.Read(buf)
+		resValue, err := resp.Read()
 		if err != nil {
 			return fmt.Errorf("failed to read %w", err)
 		}
 
-		s.logger.Printf("Master responded with: %q\n", string(buf[0:n]))
+		s.logger.Printf("Master responded with: %q\n", resValue.Format())
 	}
 
 	{
 
-		value := Value{Type: Array, Array: []Value{
+		outValue := Value{Type: Array, Array: []Value{
 			{Type: Bulk, Bulk: "REPLCONF"},
 			{Type: Bulk, Bulk: "listening-port"},
 			{Type: Bulk, Bulk: s.Port},
 		}}
-		s.logger.Printf("Sending to master: %q\n", value.Format())
+		s.logger.Printf("Sending to master: %q\n", outValue.Format())
 
-		data := []byte(value.Format())
+		data := []byte(outValue.Format())
 		_, err := connection.Write(data)
 		if err != nil {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		buf := make([]byte, 1024)
-		n, err := connection.Read(buf)
+		resValue, err := resp.Read()
 		if err != nil {
 			return fmt.Errorf("failed to read %w", err)
 		}
 
-		s.logger.Printf("Master responded with: %q\n", string(buf[0:n]))
+		s.logger.Printf("Master responded with: %q\n", resValue.Format())
 	}
 
 	{
 
-		value := Value{Type: Array, Array: []Value{
+		outValue := Value{Type: Array, Array: []Value{
 			{Type: Bulk, Bulk: "REPLCONF"},
 			{Type: Bulk, Bulk: "capa"},
 			{Type: Bulk, Bulk: "psync2"},
 		}}
-		s.logger.Printf("Sending to master: %q\n", value.Format())
+		s.logger.Printf("Sending to master: %q\n", outValue.Format())
 
-		err = value.Write(connection)
+		err = outValue.Write(connection)
 		if err != nil {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		buf := make([]byte, 1024)
-		n, err := connection.Read(buf)
+		resValue, err := resp.Read()
 		if err != nil {
 			return fmt.Errorf("failed to read %w", err)
 		}
 
-		s.logger.Printf("Master responded with: %q\n", string(buf[0:n]))
+		s.logger.Printf("Master responded with: %q\n", resValue.Format())
 	}
 
 	{
 
-		value := Value{Type: Array, Array: []Value{
+		outValue := Value{Type: Array, Array: []Value{
 			{Type: Bulk, Bulk: "PSYNC"},
 			{Type: Bulk, Bulk: "?"},
 			{Type: Bulk, Bulk: "-1"},
 		}}
-		s.logger.Printf("Sending to master: %q\n", value.Format())
+		s.logger.Printf("Sending to master: %q\n", outValue.Format())
 
-		err := value.Write(connection)
+		err := outValue.Write(connection)
 		if err != nil {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		buf := make([]byte, 1024)
-		n, err := connection.Read(buf)
+		resValue, err := resp.Read()
 		if err != nil {
 			return fmt.Errorf("failed to read %w", err)
 		}
 
-		s.logger.Printf("Master responded with: %q\n", string(buf[0:n]))
+		s.logger.Printf("Master responded with: %q\n", resValue.Format())
 	}
 
 	return nil
