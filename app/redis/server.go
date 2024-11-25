@@ -225,8 +225,9 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 	}
 	defer connection.Close()
 
-	resp := NewResp(connection)
+	go s.handleLoop(ctx, connection)
 
+	resp := NewResp(connection)
 	{
 		outValue := Value{Type: Array, Array: []Value{
 			{Type: Bulk, Bulk: "PING"},
