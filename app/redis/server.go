@@ -114,7 +114,7 @@ func (s *Server) serve(ctx context.Context, listener net.Listener) {
 }
 
 func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
-	s.logger.Printf("Handing commands from connection: %s\n", connection.RemoteAddr())
+	// s.logger.Printf("Handing commands from connection: %s\n", connection.RemoteAddr())
 
 	defer connection.Close()
 	resp := NewResp(connection)
@@ -227,7 +227,9 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 		return fmt.Errorf("failed to connect to address: %s, %w", address, err)
 	}
 
-	resp := NewResp(connection)
+	go s.handleLoop(ctx, connection)
+
+	// resp := NewResp(connection)
 	{
 		outValue := Value{Type: Array, Array: []Value{
 			{Type: Bulk, Bulk: "PING"},
@@ -239,12 +241,12 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		resValue, err := resp.Read()
-		if err != nil {
-			return fmt.Errorf("failed to read %w", err)
-		}
+		// resValue, err := resp.Read()
+		// if err != nil {
+		// 	return fmt.Errorf("failed to read %w", err)
+		// }
 
-		s.logger.Printf("Master responded with: %q\n", resValue.Format())
+		// s.logger.Printf("Master responded with: %q\n", resValue.Format())
 	}
 
 	{
@@ -262,12 +264,12 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		resValue, err := resp.Read()
-		if err != nil {
-			return fmt.Errorf("failed to read %w", err)
-		}
+		// resValue, err := resp.Read()
+		// if err != nil {
+		// 	return fmt.Errorf("failed to read %w", err)
+		// }
 
-		s.logger.Printf("Master responded with: %q\n", resValue.Format())
+		// s.logger.Printf("Master responded with: %q\n", resValue.Format())
 	}
 
 	{
@@ -284,12 +286,12 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		resValue, err := resp.Read()
-		if err != nil {
-			return fmt.Errorf("failed to read %w", err)
-		}
+		// resValue, err := resp.Read()
+		// if err != nil {
+		// 	return fmt.Errorf("failed to read %w", err)
+		// }
 
-		s.logger.Printf("Master responded with: %q\n", resValue.Format())
+		// s.logger.Printf("Master responded with: %q\n", resValue.Format())
 	}
 
 	{
@@ -306,17 +308,15 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		resValue, err := resp.Read()
-		if err != nil {
-			return fmt.Errorf("failed to read %w", err)
-		}
+		// resValue, err := resp.Read()
+		// if err != nil {
+		// 	return fmt.Errorf("failed to read %w", err)
+		// }
 
-		s.logger.Printf("Master responded with: %q\n", resValue.Format())
+		// s.logger.Printf("Master responded with: %q\n", resValue.Format())
 	}
 
-	s.logger.Println("Finished handshake. Handling master connection")
-
-	go s.handleLoop(ctx, connection)
+	// s.logger.Println("Finished handshake. Handling master connection")
 
 	return nil
 }
