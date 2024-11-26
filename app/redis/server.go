@@ -108,6 +108,7 @@ func (s *Server) serve(ctx context.Context, listener net.Listener) {
 			s.logger.Printf("New connection to the server: %s\n", connection.RemoteAddr())
 
 			go s.handleLoop(ctx, connection)
+			go s.masterHandshake(ctx)
 
 		}
 	}
@@ -227,8 +228,6 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 		return fmt.Errorf("failed to connect to address: %s, %w", address, err)
 	}
 
-	// go s.handleLoop(ctx, connection)
-
 	resp := NewResp(connection)
 	{
 		outValue := Value{Type: Array, Array: []Value{
@@ -323,7 +322,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 
 	s.logger.Println("Finished handshake")
 
-	go s.handleLoop(ctx, connection)
+	// go s.handleLoop(ctx, connection)
 
 	return nil
 }
