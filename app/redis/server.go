@@ -109,7 +109,6 @@ func (s *Server) serve(ctx context.Context, listener net.Listener) {
 
 			go s.handleLoop(ctx, connection)
 			go s.masterHandshake(ctx)
-
 		}
 	}
 }
@@ -227,6 +226,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to address: %s, %w", address, err)
 	}
+	defer connection.Close()
 
 	resp := NewResp(connection)
 	{
