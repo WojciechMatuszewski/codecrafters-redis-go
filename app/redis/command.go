@@ -8,16 +8,17 @@ import (
 type CommandType string
 
 const (
-	Echo     CommandType = "echo"
-	Ping     CommandType = "ping"
-	Set      CommandType = "set"
-	Get      CommandType = "get"
-	Cfg      CommandType = "config"
-	Info     CommandType = "info"
-	Pong     CommandType = "pong"
-	ReplConf CommandType = "replconf"
-	PSync    CommandType = "psync"
-	Ok       CommandType = "ok"
+	Echo       CommandType = "echo"
+	Ping       CommandType = "ping"
+	Set        CommandType = "set"
+	Get        CommandType = "get"
+	Cfg        CommandType = "config"
+	Info       CommandType = "info"
+	Pong       CommandType = "pong"
+	ReplConf   CommandType = "replconf"
+	PSync      CommandType = "psync"
+	Fullresync CommandType = "fullresync"
+	Ok         CommandType = "ok"
 )
 
 type Command struct {

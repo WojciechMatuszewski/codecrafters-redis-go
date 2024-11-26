@@ -145,13 +145,9 @@ func (s *Server) handle(connection net.Conn) {
 
 	cmd := NewCommand(value)
 
-	s.logger.Printf("Handling command: %q\n", cmd.value.Format())
+	s.logger.Printf("Handling command: %q\ntype: %s\n", cmd.value.Format(), cmd.Type)
 
 	switch cmd.Type {
-	case Ok:
-		return
-	case Pong:
-		return
 	case ReplConf:
 		if cmd.Args[0] == "listening-port" {
 			s.slaves = append(s.slaves, connection)
@@ -194,6 +190,11 @@ func (s *Server) handle(connection net.Conn) {
 	default:
 		outValue, err := s.client.Handle(cmd)
 		if err != nil {
+			if errors.Is(err, ErrUnknownCommand) {
+				s.logger.Printf("Unknown command: %q", cmd.value.Format())
+				return
+			}
+
 			s.logger.Fatalf("failed to handle client command: %v", err)
 		}
 
@@ -222,7 +223,7 @@ func (s *Server) handle(connection net.Conn) {
 func (s *Server) masterHandshake(ctx context.Context) error {
 	address := s.MasterAddress()
 	if address == "" {
-		s.logger.Println("Master address not defined. Skipping")
+		s.logger.Println("Master address not defined. Skipping master handshake")
 		return nil
 	}
 
