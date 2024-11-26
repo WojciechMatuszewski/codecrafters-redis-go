@@ -131,7 +131,7 @@ func (r *Resp) readBulk() (Value, error) {
 		return Value{}, fmt.Errorf("failed to read line while reading bulk: %w", err)
 	}
 
-	fmt.Printf("Content line: %q\n", string(contentLine))
+	// fmt.Printf("Content line: %q\n", string(contentLine))
 	bulk := contentLine[0:len]
 	v.Bulk = string(bulk)
 	return v, nil

@@ -25,7 +25,7 @@ type Server struct {
 	MasterPort string
 
 	client *Client
-	slaves []net.Conn
+	slaves []io.Writer
 
 	logger *log.Logger
 }
@@ -38,7 +38,7 @@ func NewServer(client *Client, host string, masterHost string, port string, mast
 		MasterPort: masterPort,
 
 		client: client,
-		slaves: []net.Conn{},
+		slaves: []io.Writer{},
 	}
 	logger := log.New(os.Stdout, fmt.Sprintf("[%s on %s:%s] ", server.role(), server.Host, server.Port), 0)
 	server.logger = logger
@@ -70,7 +70,9 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	}
 	go s.serveLoop(ctx, listener)
 
-	go s.masterHandshake(ctx)
+	if s.role() == "slave" {
+		go s.masterHandshake(ctx)
+	}
 
 	<-ctx.Done()
 
@@ -91,7 +93,7 @@ func (s *Server) listen(ctx context.Context, address string) (net.Listener, erro
 }
 
 func (s *Server) serveLoop(ctx context.Context, listener net.Listener) {
-	s.logger.Println("Accepting connections")
+	s.logger.Printf("Accepting connections on: %s\n", listener.Addr().String())
 
 	for {
 		select {
@@ -118,9 +120,9 @@ func (s *Server) serveLoop(ctx context.Context, listener net.Listener) {
 }
 
 func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
-	s.logger.Println("Initializing the handle loop")
-
 	defer connection.Close()
+
+	s.logger.Println("Initializing the handle loop")
 	for {
 		select {
 		case <-ctx.Done():
@@ -136,7 +138,6 @@ func (s *Server) handle(connection net.Conn) {
 	value, err := resp.Read()
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			s.logger.Println("EOF while reading from connection")
 			return
 		}
 
@@ -145,7 +146,7 @@ func (s *Server) handle(connection net.Conn) {
 
 	cmd := NewCommand(value)
 
-	s.logger.Printf("Handling command: %q\ntype: %s\n", cmd.value.Format(), cmd.Type)
+	s.logger.Printf("Handling command: %q | type: %s\n", cmd.value.Format(), cmd.Type)
 
 	switch cmd.Type {
 	case ReplConf:
@@ -199,7 +200,6 @@ func (s *Server) handle(connection net.Conn) {
 		}
 
 		if s.role() == "master" {
-			s.logger.Printf("Replicating: %q\n", cmd.value.Format())
 			err := s.replicate(cmd)
 			if err != nil {
 				s.logger.Println("Failed to replicate", err)
@@ -222,10 +222,6 @@ func (s *Server) handle(connection net.Conn) {
 
 func (s *Server) masterHandshake(ctx context.Context) error {
 	address := s.MasterAddress()
-	if address == "" {
-		s.logger.Println("Master address not defined. Skipping master handshake")
-		return nil
-	}
 
 	s.logger.Printf("Connecting to address at: %s\n", address)
 
@@ -234,8 +230,6 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to address: %s, %w", address, err)
 	}
-
-	// go s.handleLoop(ctx, connection)
 
 	s.logger.Println("Starting handshake")
 
@@ -360,6 +354,7 @@ func (s *Server) replicate(cmd Command) error {
 				return err
 			}
 		}
+
 		return nil
 	default:
 		return nil
