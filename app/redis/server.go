@@ -50,6 +50,14 @@ func (s *Server) Address() string {
 	return fmt.Sprintf("%s:%s", s.Host, s.Port)
 }
 
+func (s *Server) MasterAddress() string {
+	if s.MasterHost == "" || s.MasterPort == "" {
+		return ""
+	}
+
+	return fmt.Sprintf("%s:%s", s.MasterHost, s.MasterPort)
+}
+
 func (s *Server) ListenAndServe(ctx context.Context) error {
 	s.logger.Print("Starting the server")
 
@@ -60,12 +68,9 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to listen on address: %s, %w", s.Address(), err)
 	}
-	go s.serve(ctx, listener)
+	go s.serveLoop(ctx, listener)
 
-	err = s.masterHandshake(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to connect to master: %w", err)
-	}
+	go s.masterHandshake(ctx)
 
 	<-ctx.Done()
 
@@ -85,7 +90,7 @@ func (s *Server) listen(ctx context.Context, address string) (net.Listener, erro
 
 }
 
-func (s *Server) serve(ctx context.Context, listener net.Listener) {
+func (s *Server) serveLoop(ctx context.Context, listener net.Listener) {
 	s.logger.Println("Accepting connections")
 
 	for {
@@ -108,117 +113,119 @@ func (s *Server) serve(ctx context.Context, listener net.Listener) {
 			s.logger.Printf("New connection to the server: %s\n", connection.RemoteAddr())
 
 			go s.handleLoop(ctx, connection)
-			go s.masterHandshake(ctx)
 		}
 	}
 }
 
 func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
-	// s.logger.Printf("Handing commands from connection: %s\n", connection.RemoteAddr())
+	s.logger.Println("Initializing the handle loop")
 
 	defer connection.Close()
-	resp := NewResp(connection)
-
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		default:
-			value, err := resp.Read()
+			s.handle(connection)
+		}
+	}
+}
+
+func (s *Server) handle(connection net.Conn) {
+	resp := NewResp(connection)
+	value, err := resp.Read()
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			s.logger.Println("EOF while reading from connection")
+			return
+		}
+
+		log.Fatalf("failed to handle connection: %v", err)
+	}
+
+	cmd := NewCommand(value)
+
+	s.logger.Printf("Handling command: %q\n", cmd.value.Format())
+
+	switch cmd.Type {
+	case Ok:
+		return
+	case Pong:
+		return
+	case ReplConf:
+		if cmd.Args[0] == "listening-port" {
+			s.slaves = append(s.slaves, connection)
+		}
+
+		value := Value{Type: SimpleString, SimpleString: "OK"}
+		err := value.Write(connection)
+		if err != nil {
+			fmt.Println("Failed to write", err)
+		}
+	case Info:
+		info := fmt.Sprintf("role:%s\nmaster_replid:%s\nmaster_repl_offset:%s", s.role(), "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb", "0")
+		value := Value{Type: Bulk, Bulk: info}
+		err := value.Write(connection)
+		if err != nil {
+			fmt.Println("Failed to write", err)
+		}
+	case PSync:
+		data := fmt.Sprintf("FULLRESYNC %s %s", "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb", "0")
+		resyncValue := Value{
+			Type:         SimpleString,
+			SimpleString: data,
+		}
+		err := resyncValue.Write(connection)
+		if err != nil {
+			s.logger.Println("Failed to write", err)
+		}
+
+		b64RDB := "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog=="
+		rdbData, err := base64.StdEncoding.DecodeString(b64RDB)
+		if err != nil {
+			return
+		}
+		rdbValue := Value{Type: Raw, Raw: fmt.Sprintf("$%v\r\n%s", len(rdbData), rdbData)}
+		err = rdbValue.Write(connection)
+		if err != nil {
+			s.logger.Println("Failed to write", err)
+		}
+
+	default:
+		outValue, err := s.client.Handle(cmd)
+		if err != nil {
+			s.logger.Fatalf("failed to handle client command: %v", err)
+		}
+
+		if s.role() == "master" {
+			s.logger.Printf("Replicating: %q\n", cmd.value.Format())
+			err := s.replicate(cmd)
 			if err != nil {
-				if errors.Is(err, io.EOF) {
-					s.logger.Println("EOF while reading from connection")
-					return
-				}
-
-				log.Fatalf("failed to handle connection: %v", err)
+				s.logger.Println("Failed to replicate", err)
 			}
+		}
 
-			cmd := NewCommand(value)
+		if s.role() == "replica" {
+			s.logger.Println("Skipping the response")
+			return
+		}
 
-			s.logger.Printf("Handling command: %q\n", cmd.value.Format())
+		s.logger.Printf("Responding with: %q\n", outValue.Format())
 
-			switch cmd.Type {
-			case Ok:
-				continue
-			case Pong:
-				continue
-			case ReplConf:
-				if cmd.Args[0] == "listening-port" {
-					s.slaves = append(s.slaves, connection)
-				}
-
-				value := Value{Type: SimpleString, SimpleString: "OK"}
-				err := value.Write(connection)
-				if err != nil {
-					fmt.Println("Failed to write", err)
-				}
-			case Info:
-				info := fmt.Sprintf("role:%s\nmaster_replid:%s\nmaster_repl_offset:%s", s.role(), "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb", "0")
-				value := Value{Type: Bulk, Bulk: info}
-				err := value.Write(connection)
-				if err != nil {
-					fmt.Println("Failed to write", err)
-				}
-			case PSync:
-				data := fmt.Sprintf("FULLRESYNC %s %s", "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb", "0")
-				resyncValue := Value{
-					Type:         SimpleString,
-					SimpleString: data,
-				}
-				err := resyncValue.Write(connection)
-				if err != nil {
-					s.logger.Println("Failed to write", err)
-				}
-
-				b64RDB := "UkVESVMwMDEx+glyZWRpcy12ZXIFNy4yLjD6CnJlZGlzLWJpdHPAQPoFY3RpbWXCbQi8ZfoIdXNlZC1tZW3CsMQQAPoIYW9mLWJhc2XAAP/wbjv+wP9aog=="
-				rdbData, err := base64.StdEncoding.DecodeString(b64RDB)
-				if err != nil {
-					return
-				}
-				rdbValue := Value{Type: Raw, Raw: fmt.Sprintf("$%v\r\n%s", len(rdbData), rdbData)}
-				err = rdbValue.Write(connection)
-				if err != nil {
-					s.logger.Println("Failed to write", err)
-				}
-
-			default:
-				outValue, err := s.client.Handle(cmd)
-				if err != nil {
-					s.logger.Fatalf("failed to handle client command: %v", err)
-				}
-
-				if s.role() == "master" {
-					s.logger.Printf("Replicating: %q\n", cmd.value.Format())
-					err := s.replicate(cmd)
-					if err != nil {
-						s.logger.Println("Failed to replicate", err)
-					}
-				}
-
-				if s.role() == "replica" {
-					s.logger.Println("Skipping the response")
-					return
-				}
-
-				s.logger.Printf("Responding with: %q\n", outValue.Format())
-
-				_, err = connection.Write([]byte(outValue.Format()))
-				if err != nil {
-					s.logger.Fatalf("failed to respond to client command: %v", err)
-				}
-			}
-
+		_, err = connection.Write([]byte(outValue.Format()))
+		if err != nil {
+			s.logger.Fatalf("failed to respond to client command: %v", err)
 		}
 	}
 }
 
 func (s *Server) masterHandshake(ctx context.Context) error {
-	if s.MasterHost == "" || s.MasterPort == "" {
+	address := s.MasterAddress()
+	if address == "" {
+		s.logger.Println("Master address not defined. Skipping")
 		return nil
 	}
 
-	address := fmt.Sprintf("%s:%s", s.MasterHost, s.MasterPort)
 	s.logger.Printf("Connecting to address at: %s\n", address)
 
 	dialer := net.Dialer{}
@@ -226,9 +233,12 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to address: %s, %w", address, err)
 	}
-	defer connection.Close()
 
-	resp := NewResp(connection)
+	// go s.handleLoop(ctx, connection)
+
+	s.logger.Println("Starting handshake")
+
+	// resp := NewResp(connection)
 	{
 		outValue := Value{Type: Array, Array: []Value{
 			{Type: Bulk, Bulk: "PING"},
@@ -240,16 +250,17 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		resValue, err := resp.Read()
-		if err != nil {
-			return fmt.Errorf("failed to read %w", err)
-		}
+		s.handle(connection)
 
-		s.logger.Printf("Master responded with: %q\n", resValue.Format())
+		// resValue, err := resp.Read()
+		// if err != nil {
+		// 	return fmt.Errorf("failed to read %w", err)
+		// }
+
+		// s.logger.Printf("Master responded with: %q\n", resValue.Format())
 	}
 
 	{
-
 		outValue := Value{Type: Array, Array: []Value{
 			{Type: Bulk, Bulk: "REPLCONF"},
 			{Type: Bulk, Bulk: "listening-port"},
@@ -263,16 +274,17 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		resValue, err := resp.Read()
-		if err != nil {
-			return fmt.Errorf("failed to read %w", err)
-		}
+		s.handle(connection)
 
-		s.logger.Printf("Master responded with: %q\n", resValue.Format())
+		// resValue, err := resp.Read()
+		// if err != nil {
+		// 	return fmt.Errorf("failed to read %w", err)
+		// }
+
+		// s.logger.Printf("Master responded with: %q\n", resValue.Format())
 	}
 
 	{
-
 		outValue := Value{Type: Array, Array: []Value{
 			{Type: Bulk, Bulk: "REPLCONF"},
 			{Type: Bulk, Bulk: "capa"},
@@ -285,12 +297,14 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		resValue, err := resp.Read()
-		if err != nil {
-			return fmt.Errorf("failed to read %w", err)
-		}
+		s.handle(connection)
 
-		s.logger.Printf("Master responded with: %q\n", resValue.Format())
+		// resValue, err := resp.Read()
+		// if err != nil {
+		// 	return fmt.Errorf("failed to read %w", err)
+		// }
+
+		// s.logger.Printf("Master responded with: %q\n", resValue.Format())
 	}
 
 	{
@@ -307,22 +321,22 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		respFullResync, err := resp.Read()
-		if err != nil {
-			return fmt.Errorf("failed to read %w", err)
-		}
-		s.logger.Printf("Master responded with: %q\n", respFullResync.Format())
+		s.handle(connection)
 
-		respRDB, err := resp.Read()
-		if err != nil {
-			return fmt.Errorf("failed to read %w", err)
-		}
-		s.logger.Printf("Master responded with: %q\n", respRDB.Format())
+		// respFullResync, err := resp.Read()
+		// if err != nil {
+		// 	return fmt.Errorf("failed to read %w", err)
+		// }
+		// s.logger.Printf("Master responded with: %q\n", respFullResync.Format())
+
+		// respRDB, err := resp.Read()
+		// if err != nil {
+		// 	return fmt.Errorf("failed to read %w", err)
+		// }
+		// s.logger.Printf("Master responded with: %q\n", respRDB.Format())
 	}
 
 	s.logger.Println("Finished handshake")
-
-	// go s.handleLoop(ctx, connection)
 
 	return nil
 }
