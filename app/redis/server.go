@@ -130,6 +130,7 @@ func (s *Server) serveLoop(ctx context.Context, listener net.Listener) {
 
 func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 	defer connection.Close()
+	resp := NewResp(connection)
 
 	s.logger.Println("Initializing the handle loop")
 	for {
@@ -137,13 +138,12 @@ func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 		case <-ctx.Done():
 			return
 		default:
-			s.handle(connection)
+			s.handle(resp, connection)
 		}
 	}
 }
 
-func (s *Server) handle(connection net.Conn) {
-	resp := NewResp(connection)
+func (s *Server) handle(resp *Resp, writer io.Writer) {
 	value, err := resp.Read()
 	if err != nil {
 		if errors.Is(err, io.EOF) {
@@ -160,18 +160,18 @@ func (s *Server) handle(connection net.Conn) {
 	switch cmd.Type {
 	case ReplConf:
 		if cmd.Args[0] == "listening-port" {
-			s.slaves = append(s.slaves, connection)
+			s.slaves = append(s.slaves, writer)
 		}
 
 		value := Value{Type: SimpleString, SimpleString: "OK"}
-		err := value.Write(connection)
+		err := value.Write(writer)
 		if err != nil {
 			fmt.Println("Failed to write", err)
 		}
 	case Info:
 		info := fmt.Sprintf("role:%s\nmaster_replid:%s\nmaster_repl_offset:%s", s.role(), "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb", "0")
 		value := Value{Type: Bulk, Bulk: info}
-		err := value.Write(connection)
+		err := value.Write(writer)
 		if err != nil {
 			fmt.Println("Failed to write", err)
 		}
@@ -181,7 +181,7 @@ func (s *Server) handle(connection net.Conn) {
 			Type:         SimpleString,
 			SimpleString: data,
 		}
-		err := resyncValue.Write(connection)
+		err := resyncValue.Write(writer)
 		if err != nil {
 			s.logger.Println("Failed to write", err)
 		}
@@ -192,7 +192,7 @@ func (s *Server) handle(connection net.Conn) {
 			return
 		}
 		rdbValue := Value{Type: Raw, Raw: fmt.Sprintf("$%v\r\n%s", len(rdbData), rdbData)}
-		err = rdbValue.Write(connection)
+		err = rdbValue.Write(writer)
 		if err != nil {
 			s.logger.Println("Failed to write", err)
 		}
@@ -222,14 +222,14 @@ func (s *Server) handle(connection net.Conn) {
 
 		s.logger.Printf("Responding with: %q\n", outValue.Format())
 
-		_, err = connection.Write([]byte(outValue.Format()))
+		_, err = writer.Write([]byte(outValue.Format()))
 		if err != nil {
 			s.logger.Fatalf("failed to respond to client command: %v", err)
 		}
 	}
 }
 
-func (s *Server) masterHandshake(ctx context.Context) (net.Conn, error) {
+func (s *Server) masterHandshake(ctx context.Context) (io.Reader, error) {
 	address := s.MasterAddress()
 
 	s.logger.Printf("Connecting to address at: %s\n", address)
@@ -334,8 +334,6 @@ func (s *Server) masterHandshake(ctx context.Context) (net.Conn, error) {
 				return nil, fmt.Errorf("invalid RDB file transfer response: %w", err)
 			}
 
-			s.logger.Printf("Master responded with: %q\n", out)
-
 			if out[0] != '$' {
 				return nil, fmt.Errorf("invalid RDB file transfer response")
 			}
@@ -350,11 +348,13 @@ func (s *Server) masterHandshake(ctx context.Context) (net.Conn, error) {
 			if rdbSize != receivedSize {
 				return nil, fmt.Errorf("rdb size mismatch - got: %d, want: %d", receivedSize, rdbSize)
 			}
+
+			s.logger.Printf("Master responded with: %q\n", string(buffer))
 		}
 
 	}
 
-	return connection, nil
+	return handshakeReader, nil
 }
 
 func (s *Server) role() string {
