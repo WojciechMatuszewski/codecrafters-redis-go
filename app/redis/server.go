@@ -233,7 +233,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 
 	s.logger.Println("Starting handshake")
 
-	resp := NewResp(connection)
+	// resp := NewResp(connection)
 	{
 		outValue := Value{Type: Array, Array: []Value{
 			{Type: Bulk, Bulk: "PING"},
