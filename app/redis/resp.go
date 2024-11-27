@@ -110,7 +110,7 @@ func (r *Resp) readLine() ([]byte, error) {
 		}
 	}
 
-	fmt.Println("Read line", string(line))
+	fmt.Printf("Read line %q\n", string(line))
 
 	return line[:len(line)-2], nil
 }
