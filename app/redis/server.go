@@ -233,7 +233,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 
 	s.logger.Println("Starting handshake")
 
-	// resp := NewResp(connection)
+	resp := NewResp(connection)
 	{
 		outValue := Value{Type: Array, Array: []Value{
 			{Type: Bulk, Bulk: "PING"},
@@ -316,32 +316,12 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		fmt.Println("Handle first")
-		s.handle(connection)
+		s.logger.Println("Last handshake read")
 
-		fmt.Println("Handle second")
-		s.handle(connection)
+		buf := make([]byte, 1024)
+		n, err := connection.Read(buf)
+		fmt.Println("Read", n, string(buf))
 
-		fmt.Println("Handle third")
-		s.handle(connection)
-
-		fmt.Println("Handle fourth")
-		s.handle(connection)
-
-		fmt.Println("Handle fifth")
-		s.handle(connection)
-
-		// respFullResync, err := resp.Read()
-		// if err != nil {
-		// 	return fmt.Errorf("failed to read %w", err)
-		// }
-		// s.logger.Printf("Master responded with: %q\n", respFullResync.Format())
-
-		// respRDB, err := resp.Read()
-		// if err != nil {
-		// 	return fmt.Errorf("failed to read %w", err)
-		// }
-		// s.logger.Printf("Master responded with: %q\n", respRDB.Format())
 	}
 
 	s.logger.Println("Finished handshake")
