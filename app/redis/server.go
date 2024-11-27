@@ -245,7 +245,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		s.handle(connection, resp)
+		resp.Read()
 	}
 
 	{
@@ -262,7 +262,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		s.handle(connection, resp)
+		resp.Read()
 	}
 
 	{
@@ -278,7 +278,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		s.handle(connection, resp)
+		resp.Read()
 	}
 
 	{
@@ -294,6 +294,10 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
+
+		resp.Read()
+
+		resp.Read()
 
 		for {
 			s.handle(connection, resp)
@@ -323,7 +327,7 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 
 	// s.logger.Println("Finished handshake")
 
-	return nil
+	// return nil
 }
 
 func (s *Server) role() string {
