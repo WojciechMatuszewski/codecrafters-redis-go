@@ -81,6 +81,7 @@ func (r *Resp) Read() (Value, error) {
 	}
 
 	_type := RespType(buf[0])
+	fmt.Println("Read type", string(_type))
 	switch _type {
 	case rArray:
 		return r.readArray()
