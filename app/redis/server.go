@@ -316,14 +316,19 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
+		fmt.Println("Handle first")
 		s.handle(connection)
 
+		fmt.Println("Handle second")
 		s.handle(connection)
 
+		fmt.Println("Handle third")
 		s.handle(connection)
 
+		fmt.Println("Handle fourth")
 		s.handle(connection)
 
+		fmt.Println("Handle fifth")
 		s.handle(connection)
 
 		// respFullResync, err := resp.Read()
