@@ -318,9 +318,23 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 
 		s.logger.Println("Last handshake read")
 
-		buf := make([]byte, 1024)
-		n, err := connection.Read(buf)
-		fmt.Println("Read", n, string(buf))
+		{
+			buf := make([]byte, 1024)
+			n, err := connection.Read(buf)
+			fmt.Println("Read", n, string(buf), err)
+		}
+
+		{
+			buf := make([]byte, 1024)
+			n, err := connection.Read(buf)
+			fmt.Println("Read", n, string(buf), err)
+		}
+
+		{
+			buf := make([]byte, 1024)
+			n, err := connection.Read(buf)
+			fmt.Println("Read", n, string(buf), err)
+		}
 
 	}
 
