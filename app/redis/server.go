@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 )
 
@@ -298,16 +299,28 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		{
-			buf := make([]byte, 1024)
-			n, err := connection.Read(buf)
-			fmt.Println("Read", n, string(buf), err)
-		}
+		value, _ := resp.Read()
+		fmt.Printf("Master responded with: %q\n", value)
+
+		// value, _ = resp.Read()
+		// fmt.Printf("Master responded with: %q\n", value)
 
 		{
-			buf := make([]byte, 1024)
-			n, err := connection.Read(buf)
-			fmt.Println("Read", n, string(buf), err)
+			response, _ := resp.reader.ReadString('\n')
+			if response[0] != '$' {
+				fmt.Printf("Invalid response\n")
+				os.Exit(1)
+			}
+			rdbSize, _ := strconv.Atoi(response[1 : len(response)-2])
+			buffer := make([]byte, rdbSize)
+			receivedSize, err := resp.reader.Read(buffer)
+			if err != nil {
+				fmt.Printf("Invalid RDB received %v\n", err)
+				os.Exit(1)
+			}
+			if rdbSize != receivedSize {
+				fmt.Printf("Size mismatch - got: %d, want: %d\n", receivedSize, rdbSize)
+			}
 		}
 
 		for {
