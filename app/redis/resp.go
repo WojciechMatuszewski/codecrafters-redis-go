@@ -81,7 +81,6 @@ func (r *Resp) Read() (Value, error) {
 	}
 
 	_type := RespType(buf[0])
-	fmt.Println("Read type", string(_type))
 	switch _type {
 	case rArray:
 		return r.readArray()
@@ -111,8 +110,6 @@ func (r *Resp) readLine() ([]byte, error) {
 		}
 	}
 
-	fmt.Printf("Read line %q\n", string(line))
-
 	return line[:len(line)-2], nil
 }
 
@@ -134,7 +131,6 @@ func (r *Resp) readBulk() (Value, error) {
 		return Value{}, fmt.Errorf("failed to read line while reading bulk: %w", err)
 	}
 
-	// fmt.Printf("Content line: %q\n", string(contentLine))
 	bulk := contentLine[0:len]
 	v.Bulk = string(bulk)
 	return v, nil
