@@ -298,23 +298,23 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		value, _ := resp.Read()
-		fmt.Printf("Master responded with: %q\n", value)
+		{
+			buf := make([]byte, 1024)
+			n, err := connection.Read(buf)
+			fmt.Println("Read", n, string(buf), err)
+		}
 
-		value, _ = resp.Read()
-		fmt.Printf("Master responded with: %q\n", value)
+		{
+			buf := make([]byte, 1024)
+			n, err := connection.Read(buf)
+			fmt.Println("Read", n, string(buf), err)
+		}
 
 		for {
 			s.handle(connection, resp)
 		}
 
 		// s.logger.Println("Last handshake read")
-
-		// {
-		// 	buf := make([]byte, 1024)
-		// 	n, err := connection.Read(buf)
-		// 	fmt.Println("Read", n, string(buf), err)
-		// }
 
 		// {
 		// 	buf := make([]byte, 1024)
