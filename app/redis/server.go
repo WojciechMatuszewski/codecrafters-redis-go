@@ -78,6 +78,8 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 			return fmt.Errorf("failed to establish master handshake: %w", err)
 		}
 
+		s.logger.Println("Finished master handshake")
+
 		go s.handleLoop(ctx, masterConnection)
 	}
 
@@ -331,6 +333,8 @@ func (s *Server) masterHandshake(ctx context.Context) (net.Conn, error) {
 			if err != nil {
 				return nil, fmt.Errorf("invalid RDB file transfer response: %w", err)
 			}
+
+			s.logger.Printf("Master responded with: %q\n", out)
 
 			if out[0] != '$' {
 				return nil, fmt.Errorf("invalid RDB file transfer response")
