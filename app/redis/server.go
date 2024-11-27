@@ -245,7 +245,8 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		resp.Read()
+		value, _ := resp.Read()
+		fmt.Printf("Master responded with: %q\n", value)
 	}
 
 	{
@@ -262,7 +263,8 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		resp.Read()
+		value, _ := resp.Read()
+		fmt.Printf("Master responded with: %q\n", value)
 	}
 
 	{
@@ -278,7 +280,8 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		resp.Read()
+		value, _ := resp.Read()
+		fmt.Printf("Master responded with: %q\n", value)
 	}
 
 	{
@@ -295,9 +298,11 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		resp.Read()
+		value, _ := resp.Read()
+		fmt.Printf("Master responded with: %q\n", value)
 
-		resp.Read()
+		value, _ = resp.Read()
+		fmt.Printf("Master responded with: %q\n", value)
 
 		for {
 			s.handle(connection, resp)

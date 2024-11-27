@@ -96,4 +96,11 @@ func TestResp(t *testing.T) {
 			assert.Equal(t, test.expected, value)
 		})
 	}
+
+	t.Run("smoke", func(t *testing.T) {
+		r := bytes.NewReader([]byte("*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n123\r\n*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n123\r\n"))
+		resp := redis.NewResp(r)
+		value, err := resp.Read()
+		fmt.Println(value, err)
+	})
 }
