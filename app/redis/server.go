@@ -322,6 +322,10 @@ func (s *Server) masterHandshake(ctx context.Context) error {
 
 		s.handle(connection)
 
+		s.handle(connection)
+
+		s.handle(connection)
+
 		// respFullResync, err := resp.Read()
 		// if err != nil {
 		// 	return fmt.Errorf("failed to read %w", err)
