@@ -37,3 +37,9 @@
   - There are some gymnastics involved if you want to ignore unknown flags.
 
   - You can call the `Parse` on the `FlagSet` only once. Calling it multiple times causes issues.
+
+- I've been trying to figure out this issue where creating a new `Resp` would NOT start from where the "old" `Resp` finished. This would imply that the "old" `Resp` read more data than it returned.
+
+  - **This was due to buffering – the `Resp` I had used `bufio.Reader`. The reader _might_ read more from the connection and hold it inside an internal buffer for performance reasons**.
+
+  - The **solution is to pass the `Resp` around** thought I'm not a fan of it because **it relays on the knowledge of the internal implementation of `Resp`**.

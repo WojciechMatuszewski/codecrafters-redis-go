@@ -72,16 +72,23 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	go s.serveLoop(ctx, listener)
 
 	if s.role() == "slave" {
+		connection, err := s.connect(ctx, s.MasterAddress())
+		if err != nil {
+			return fmt.Errorf("failed to establish master handshake: %w", err)
+		}
+
+		resp := NewResp(connection)
+
 		s.logger.Println("Starting master handshake")
 
-		_, connection, err := s.masterHandshake(ctx)
+		err = s.masterHandshake(resp, connection)
 		if err != nil {
 			return fmt.Errorf("failed to establish master handshake: %w", err)
 		}
 
 		s.logger.Println("Finished master handshake")
 
-		go s.handleLoop(ctx, connection)
+		go s.handleLoop(ctx, resp, connection)
 	}
 
 	<-ctx.Done()
@@ -100,6 +107,18 @@ func (s *Server) listen(ctx context.Context, address string) (net.Listener, erro
 
 	return listener, err
 
+}
+
+func (s *Server) connect(ctx context.Context, address string) (net.Conn, error) {
+	s.logger.Printf("Connecting to address at: %s\n", address)
+
+	dialer := net.Dialer{}
+	connection, err := dialer.DialContext(ctx, "tcp", address)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to address: %s, %w", address, err)
+	}
+
+	return connection, nil
 }
 
 func (s *Server) serveLoop(ctx context.Context, listener net.Listener) {
@@ -124,15 +143,14 @@ func (s *Server) serveLoop(ctx context.Context, listener net.Listener) {
 
 			s.logger.Printf("New connection to the server: %s\n", connection.RemoteAddr())
 
-			// resp := NewResp(connection)
-			go s.handleLoop(ctx, connection)
+			resp := NewResp(connection)
+			go s.handleLoop(ctx, resp, connection)
 		}
 	}
 }
 
-func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
+func (s *Server) handleLoop(ctx context.Context, resp *Resp, connection net.Conn) {
 	defer connection.Close()
-	resp := NewResp(connection)
 
 	s.logger.Println("Initializing the handle loop")
 	for {
@@ -231,35 +249,23 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 	}
 }
 
-func (s *Server) masterHandshake(ctx context.Context) (*Resp, net.Conn, error) {
-	address := s.MasterAddress()
-
-	s.logger.Printf("Connecting to address at: %s\n", address)
-
-	dialer := net.Dialer{}
-	connection, err := dialer.DialContext(ctx, "tcp", address)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to connect to address: %s, %w", address, err)
-	}
-
+func (s *Server) masterHandshake(resp *Resp, writer io.Writer) error {
 	s.logger.Println("Starting handshake")
 
-	resp := NewResp(connection)
-	reader := resp.reader
 	{
 		outValue := Value{Type: Array, Array: []Value{
 			{Type: Bulk, Bulk: "PING"},
 		}}
 		s.logger.Printf("Sending to master: %q\n", outValue.Format())
 
-		err := outValue.Write(connection)
+		err := outValue.Write(writer)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to write to master: %w", err)
+			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		out, err := reader.ReadString('\n')
+		out, err := resp.reader.ReadString('\n')
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to read during handshake: %w", err)
+			return fmt.Errorf("failed to read during handshake: %w", err)
 		}
 
 		s.logger.Printf("Master responded with: %q\n", out)
@@ -274,14 +280,14 @@ func (s *Server) masterHandshake(ctx context.Context) (*Resp, net.Conn, error) {
 		s.logger.Printf("Sending to master: %q\n", outValue.Format())
 
 		data := []byte(outValue.Format())
-		_, err := connection.Write(data)
+		_, err := writer.Write(data)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to write to master: %w", err)
+			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		out, err := reader.ReadString('\n')
+		out, err := resp.reader.ReadString('\n')
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to read during handshake: %w", err)
+			return fmt.Errorf("failed to read during handshake: %w", err)
 		}
 
 		s.logger.Printf("Master responded with: %q\n", out)
@@ -295,14 +301,14 @@ func (s *Server) masterHandshake(ctx context.Context) (*Resp, net.Conn, error) {
 		}}
 		s.logger.Printf("Sending to master: %q\n", outValue.Format())
 
-		err = outValue.Write(connection)
+		err := outValue.Write(writer)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to write to master: %w", err)
+			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		out, err := reader.ReadString('\n')
+		out, err := resp.reader.ReadString('\n')
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to read during handshake: %w", err)
+			return fmt.Errorf("failed to read during handshake: %w", err)
 		}
 
 		s.logger.Printf("Master responded with: %q\n", out)
@@ -317,39 +323,39 @@ func (s *Server) masterHandshake(ctx context.Context) (*Resp, net.Conn, error) {
 		}}
 		s.logger.Printf("Sending to master: %q\n", outValue.Format())
 
-		err := outValue.Write(connection)
+		err := outValue.Write(writer)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to write to master: %w", err)
+			return fmt.Errorf("failed to write to master: %w", err)
 		}
 
 		{
-			out, err := reader.ReadString('\n')
+			out, err := resp.reader.ReadString('\n')
 			if err != nil {
-				return nil, nil, fmt.Errorf("failed to read during handshake: %w", err)
+				return fmt.Errorf("failed to read during handshake: %w", err)
 			}
 
 			s.logger.Printf("Master responded with: %q\n", out)
 		}
 
 		{
-			out, err := reader.ReadString('\n')
+			out, err := resp.reader.ReadString('\n')
 			if err != nil {
-				return nil, nil, fmt.Errorf("invalid RDB file transfer response: %w", err)
+				return fmt.Errorf("invalid RDB file transfer response: %w", err)
 			}
 
 			if out[0] != '$' {
-				return nil, nil, fmt.Errorf("invalid RDB file transfer response")
+				return fmt.Errorf("invalid RDB file transfer response")
 			}
 
 			rdbSize, _ := strconv.Atoi(out[1 : len(out)-2])
 			buffer := make([]byte, rdbSize)
-			receivedSize, err := reader.Read(buffer)
+			receivedSize, err := resp.reader.Read(buffer)
 			if err != nil {
-				return nil, nil, fmt.Errorf("invalid RDB file transfer response: %w", err)
+				return fmt.Errorf("invalid RDB file transfer response: %w", err)
 			}
 
 			if rdbSize != receivedSize {
-				return nil, nil, fmt.Errorf("rdb size mismatch - got: %d, want: %d", receivedSize, rdbSize)
+				return fmt.Errorf("rdb size mismatch - got: %d, want: %d", receivedSize, rdbSize)
 			}
 
 			s.logger.Printf("Master responded with: %q\n", string(buffer))
@@ -357,7 +363,7 @@ func (s *Server) masterHandshake(ctx context.Context) (*Resp, net.Conn, error) {
 
 	}
 
-	return nil, connection, nil
+	return nil
 }
 
 func (s *Server) role() string {
