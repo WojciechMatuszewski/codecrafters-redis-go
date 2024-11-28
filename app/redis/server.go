@@ -1,7 +1,6 @@
 package redis
 
 import (
-	"bufio"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -73,14 +72,16 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	go s.serveLoop(ctx, listener)
 
 	if s.role() == "slave" {
-		masterConnection, err := s.masterHandshake(ctx)
+		s.logger.Println("Starting master handshake")
+
+		resp, connection, err := s.masterHandshake(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to establish master handshake: %w", err)
 		}
 
 		s.logger.Println("Finished master handshake")
 
-		go s.handleLoop(ctx, masterConnection)
+		go s.handleLoop(ctx, resp, connection)
 	}
 
 	<-ctx.Done()
@@ -123,14 +124,14 @@ func (s *Server) serveLoop(ctx context.Context, listener net.Listener) {
 
 			s.logger.Printf("New connection to the server: %s\n", connection.RemoteAddr())
 
-			go s.handleLoop(ctx, connection)
+			resp := NewResp(connection)
+			go s.handleLoop(ctx, resp, connection)
 		}
 	}
 }
 
-func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
+func (s *Server) handleLoop(ctx context.Context, resp *Resp, connection net.Conn) {
 	defer connection.Close()
-	resp := NewResp(connection)
 
 	s.logger.Println("Initializing the handle loop")
 	for {
@@ -229,7 +230,7 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 	}
 }
 
-func (s *Server) masterHandshake(ctx context.Context) (io.Reader, error) {
+func (s *Server) masterHandshake(ctx context.Context) (*Resp, net.Conn, error) {
 	address := s.MasterAddress()
 
 	s.logger.Printf("Connecting to address at: %s\n", address)
@@ -237,12 +238,13 @@ func (s *Server) masterHandshake(ctx context.Context) (io.Reader, error) {
 	dialer := net.Dialer{}
 	connection, err := dialer.DialContext(ctx, "tcp", address)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to address: %s, %w", address, err)
+		return nil, nil, fmt.Errorf("failed to connect to address: %s, %w", address, err)
 	}
 
 	s.logger.Println("Starting handshake")
 
-	handshakeReader := bufio.NewReader(connection)
+	resp := NewResp(connection)
+	reader := resp.reader
 	{
 		outValue := Value{Type: Array, Array: []Value{
 			{Type: Bulk, Bulk: "PING"},
@@ -251,12 +253,12 @@ func (s *Server) masterHandshake(ctx context.Context) (io.Reader, error) {
 
 		err := outValue.Write(connection)
 		if err != nil {
-			return nil, fmt.Errorf("failed to write to master: %w", err)
+			return nil, nil, fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		out, err := handshakeReader.ReadString('\n')
+		out, err := reader.ReadString('\n')
 		if err != nil {
-			return nil, fmt.Errorf("failed to read during handshake: %w", err)
+			return nil, nil, fmt.Errorf("failed to read during handshake: %w", err)
 		}
 
 		s.logger.Printf("Master responded with: %q\n", out)
@@ -273,12 +275,12 @@ func (s *Server) masterHandshake(ctx context.Context) (io.Reader, error) {
 		data := []byte(outValue.Format())
 		_, err := connection.Write(data)
 		if err != nil {
-			return nil, fmt.Errorf("failed to write to master: %w", err)
+			return nil, nil, fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		out, err := handshakeReader.ReadString('\n')
+		out, err := reader.ReadString('\n')
 		if err != nil {
-			return nil, fmt.Errorf("failed to read during handshake: %w", err)
+			return nil, nil, fmt.Errorf("failed to read during handshake: %w", err)
 		}
 
 		s.logger.Printf("Master responded with: %q\n", out)
@@ -294,12 +296,12 @@ func (s *Server) masterHandshake(ctx context.Context) (io.Reader, error) {
 
 		err = outValue.Write(connection)
 		if err != nil {
-			return nil, fmt.Errorf("failed to write to master: %w", err)
+			return nil, nil, fmt.Errorf("failed to write to master: %w", err)
 		}
 
-		out, err := handshakeReader.ReadString('\n')
+		out, err := reader.ReadString('\n')
 		if err != nil {
-			return nil, fmt.Errorf("failed to read during handshake: %w", err)
+			return nil, nil, fmt.Errorf("failed to read during handshake: %w", err)
 		}
 
 		s.logger.Printf("Master responded with: %q\n", out)
@@ -316,37 +318,37 @@ func (s *Server) masterHandshake(ctx context.Context) (io.Reader, error) {
 
 		err := outValue.Write(connection)
 		if err != nil {
-			return nil, fmt.Errorf("failed to write to master: %w", err)
+			return nil, nil, fmt.Errorf("failed to write to master: %w", err)
 		}
 
 		{
-			out, err := handshakeReader.ReadString('\n')
+			out, err := reader.ReadString('\n')
 			if err != nil {
-				return nil, fmt.Errorf("failed to read during handshake: %w", err)
+				return nil, nil, fmt.Errorf("failed to read during handshake: %w", err)
 			}
 
 			s.logger.Printf("Master responded with: %q\n", out)
 		}
 
 		{
-			out, err := handshakeReader.ReadString('\n')
+			out, err := reader.ReadString('\n')
 			if err != nil {
-				return nil, fmt.Errorf("invalid RDB file transfer response: %w", err)
+				return nil, nil, fmt.Errorf("invalid RDB file transfer response: %w", err)
 			}
 
 			if out[0] != '$' {
-				return nil, fmt.Errorf("invalid RDB file transfer response")
+				return nil, nil, fmt.Errorf("invalid RDB file transfer response")
 			}
 
 			rdbSize, _ := strconv.Atoi(out[1 : len(out)-2])
 			buffer := make([]byte, rdbSize)
-			receivedSize, err := handshakeReader.Read(buffer)
+			receivedSize, err := reader.Read(buffer)
 			if err != nil {
-				return nil, fmt.Errorf("invalid RDB file transfer response: %w", err)
+				return nil, nil, fmt.Errorf("invalid RDB file transfer response: %w", err)
 			}
 
 			if rdbSize != receivedSize {
-				return nil, fmt.Errorf("rdb size mismatch - got: %d, want: %d", receivedSize, rdbSize)
+				return nil, nil, fmt.Errorf("rdb size mismatch - got: %d, want: %d", receivedSize, rdbSize)
 			}
 
 			s.logger.Printf("Master responded with: %q\n", string(buffer))
@@ -354,7 +356,7 @@ func (s *Server) masterHandshake(ctx context.Context) (io.Reader, error) {
 
 	}
 
-	return handshakeReader, nil
+	return resp, connection, nil
 }
 
 func (s *Server) role() string {
