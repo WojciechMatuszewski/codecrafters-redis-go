@@ -183,7 +183,7 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 			s.slaves = append(s.slaves, writer)
 		}
 
-		if cmd.Args[0] == "getack" {
+		if cmd.Args[0] == "GETACK" {
 			value := Value{Type: Array, Array: []Value{
 				{Type: Bulk, Bulk: "REPLCONF"},
 				{Type: Bulk, Bulk: "ACK"},
