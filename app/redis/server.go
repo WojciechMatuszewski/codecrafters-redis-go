@@ -124,14 +124,15 @@ func (s *Server) serveLoop(ctx context.Context, listener net.Listener) {
 
 			s.logger.Printf("New connection to the server: %s\n", connection.RemoteAddr())
 
-			resp := NewResp(connection)
-			go s.handleLoop(ctx, resp, connection)
+			// resp := NewResp(connection)
+			go s.handleLoop(ctx, connection)
 		}
 	}
 }
 
-func (s *Server) handleLoop(ctx context.Context, resp *Resp, connection net.Conn) {
+func (s *Server) handleLoop(ctx context.Context, connection net.Conn) {
 	defer connection.Close()
+	resp := NewResp(connection)
 
 	s.logger.Println("Initializing the handle loop")
 	for {
@@ -356,7 +357,7 @@ func (s *Server) masterHandshake(ctx context.Context) (*Resp, net.Conn, error) {
 
 	}
 
-	return resp, connection, nil
+	return nil, connection, nil
 }
 
 func (s *Server) role() string {

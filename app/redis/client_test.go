@@ -1,5 +1,35 @@
 package redis_test
 
+import (
+	"bufio"
+	"bytes"
+	"fmt"
+	"testing"
+)
+
+func TestSomething(t *testing.T) {
+	t.Run("foo", func(t *testing.T) {
+		buf := bytes.NewBuffer([]byte{})
+
+		reader := bufio.NewReader(buf)
+
+		buf.WriteString("foo\n")
+		buf.WriteString("bar\n")
+
+		{
+			line, err := buf.ReadString('\n')
+			fmt.Println(line, err)
+		}
+
+		{
+			line, err := reader.ReadString('\n')
+			fmt.Println(line, err)
+		}
+
+		// buf.Write([]byte{})
+	})
+}
+
 // func TestClient(t *testing.T) {
 // 	ctx := context.Background()
 // 	clientInfo := redis.ClientInfo{Role: "master"}
