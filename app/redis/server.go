@@ -74,14 +74,14 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	if s.role() == "slave" {
 		s.logger.Println("Starting master handshake")
 
-		resp, connection, err := s.masterHandshake(ctx)
+		_, connection, err := s.masterHandshake(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to establish master handshake: %w", err)
 		}
 
 		s.logger.Println("Finished master handshake")
 
-		go s.handleLoop(ctx, resp, connection)
+		go s.handleLoop(ctx, connection)
 	}
 
 	<-ctx.Done()
