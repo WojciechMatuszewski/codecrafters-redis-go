@@ -84,6 +84,14 @@ func TestResp(t *testing.T) {
 			input:    redis.FormatSimpleString("hi there"),
 			expected: redis.Value{Type: redis.SimpleString, SimpleString: "hi there"},
 		},
+		"REPLCONF ACK 0": {
+			input: "*3\r\n$8\r\nreplconf\r\n$6\r\ngetack\r\n$1\r\n*\r\n",
+			expected: redis.Value{Type: redis.Array, Array: []redis.Value{
+				{Type: redis.Bulk, Bulk: "replconf"},
+				{Type: redis.Bulk, Bulk: "getack"},
+				{Type: redis.Bulk, Bulk: "*"},
+			}},
+		},
 	}
 
 	for name, test := range tests {
@@ -96,11 +104,4 @@ func TestResp(t *testing.T) {
 			assert.Equal(t, test.expected, value)
 		})
 	}
-
-	t.Run("smoke", func(t *testing.T) {
-		r := bytes.NewReader([]byte("*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n123\r\n*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n123\r\n"))
-		resp := redis.NewResp(r)
-		value, err := resp.Read()
-		fmt.Println(value, err)
-	})
 }

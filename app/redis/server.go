@@ -183,11 +183,24 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 			s.slaves = append(s.slaves, writer)
 		}
 
-		value := Value{Type: SimpleString, SimpleString: "OK"}
-		err := value.Write(writer)
-		if err != nil {
-			fmt.Println("Failed to write", err)
+		if cmd.Args[0] == "getack" {
+			value := Value{Type: Array, Array: []Value{
+				{Type: Bulk, Bulk: "REPLCONF"},
+				{Type: Bulk, Bulk: "ACK"},
+				{Type: Bulk, Bulk: "0"},
+			}}
+			err := value.Write(writer)
+			if err != nil {
+				fmt.Println("Failed to write", err)
+			}
+		} else {
+			value := Value{Type: SimpleString, SimpleString: "OK"}
+			err := value.Write(writer)
+			if err != nil {
+				fmt.Println("Failed to write", err)
+			}
 		}
+
 	case Info:
 		info := fmt.Sprintf("role:%s\nmaster_replid:%s\nmaster_repl_offset:%s", s.role(), "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb", "0")
 		value := Value{Type: Bulk, Bulk: info}
