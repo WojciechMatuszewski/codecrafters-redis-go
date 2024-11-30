@@ -189,6 +189,8 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 		}
 
 		if cmd.Args[0] == "GETACK" {
+			s.logger.Printf("GETACK. Current offset: %v\n", s.offset)
+
 			offsetToSend := s.offset - len([]byte(value.Format()))
 
 			value := Value{Type: Array, Array: []Value{
