@@ -192,8 +192,6 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 		if cmd.Args[0] == "GETACK" {
 			s.logger.Printf("GETACK. Current offset: %v\n", s.offset)
 
-			s.offset = s.offset - cmdLen
-
 			value := Value{Type: Array, Array: []Value{
 				{Type: Bulk, Bulk: "REPLCONF"},
 				{Type: Bulk, Bulk: "ACK"},
