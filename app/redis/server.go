@@ -200,6 +200,8 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 				fmt.Println("Failed to write", err)
 			}
 
+			s.offset = s.offset + cmdLen
+
 		} else {
 
 			value := Value{Type: SimpleString, SimpleString: "OK"}
