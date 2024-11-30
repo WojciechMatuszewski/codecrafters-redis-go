@@ -258,7 +258,7 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 			}
 		}
 
-		if s.role() == "replica" {
+		if s.role() == "slave" {
 			s.logger.Println("Skipping the response")
 			return
 		}
