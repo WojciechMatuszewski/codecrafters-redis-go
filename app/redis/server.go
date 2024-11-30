@@ -253,17 +253,20 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 			s.logger.Fatalf("failed to handle client command: %v", err)
 		}
 
-		if s.role() == "master" {
-			err := s.replicate(cmd)
-			if err != nil {
-				s.logger.Println("Failed to replicate", err)
-			}
-		}
-
 		if s.role() == "slave" {
 			s.offset = cmdLen + s.offset
 
+			if cmd.Type == Get {
+				_, err = writer.Write([]byte(outValue.Format()))
+				if err != nil {
+					s.logger.Fatalf("failed to respond to client command: %v", err)
+				}
+
+				return
+			}
+
 			s.logger.Println("Skipping the response")
+
 			return
 		}
 
@@ -272,6 +275,13 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 		_, err = writer.Write([]byte(outValue.Format()))
 		if err != nil {
 			s.logger.Fatalf("failed to respond to client command: %v", err)
+		}
+
+		if s.role() == "master" {
+			err := s.replicate(cmd)
+			if err != nil {
+				s.logger.Println("Failed to replicate", err)
+			}
 		}
 	}
 }
