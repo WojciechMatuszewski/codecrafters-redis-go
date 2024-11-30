@@ -176,11 +176,12 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 		log.Fatalf("failed to handle connection: %v", err)
 	}
 
-	s.offset = s.offset + len([]byte(value.Format()))
+	cmdLen := len([]byte(value.Format()))
+	s.offset = s.offset + cmdLen
 
 	cmd := NewCommand(value)
 
-	s.logger.Printf("Handling command: %q | type: %s\n", cmd.value.Format(), cmd.Type)
+	s.logger.Printf("Handling command: %q | type: %s | len: %v\n", cmd.value.Format(), cmd.Type, cmdLen)
 
 	switch cmd.Type {
 	case ReplConf:
