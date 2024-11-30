@@ -29,6 +29,8 @@ type Server struct {
 	slaves []io.Writer
 
 	logger *log.Logger
+
+	offset int
 }
 
 func NewServer(client *Client, host string, masterHost string, port string, masterPort string) *Server {
@@ -40,6 +42,7 @@ func NewServer(client *Client, host string, masterHost string, port string, mast
 
 		client: client,
 		slaves: []io.Writer{},
+		offset: 0,
 	}
 	logger := log.New(os.Stdout, fmt.Sprintf("[%s on %s:%s] ", server.role(), server.Host, server.Port), 0)
 	server.logger = logger
@@ -173,6 +176,8 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 		log.Fatalf("failed to handle connection: %v", err)
 	}
 
+	s.offset = s.offset + len([]byte(value.Format()))
+
 	cmd := NewCommand(value)
 
 	s.logger.Printf("Handling command: %q | type: %s\n", cmd.value.Format(), cmd.Type)
@@ -184,15 +189,20 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 		}
 
 		if cmd.Args[0] == "GETACK" {
+			offsetToSend := s.offset - len([]byte(value.Format()))
+
 			value := Value{Type: Array, Array: []Value{
 				{Type: Bulk, Bulk: "REPLCONF"},
 				{Type: Bulk, Bulk: "ACK"},
-				{Type: Bulk, Bulk: "0"},
+				{Type: Bulk, Bulk: fmt.Sprintf("%v", offsetToSend)},
 			}}
 			err := value.Write(writer)
 			if err != nil {
 				fmt.Println("Failed to write", err)
 			}
+
+			s.offset = len([]byte(value.Format()))
+
 		} else {
 			value := Value{Type: SimpleString, SimpleString: "OK"}
 			err := value.Write(writer)
