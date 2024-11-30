@@ -192,19 +192,17 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 		if cmd.Args[0] == "GETACK" {
 			s.logger.Printf("GETACK. Current offset: %v\n", s.offset)
 
-			offsetToSend := s.offset - len([]byte(value.Format()))
+			s.offset = s.offset - cmdLen
 
 			value := Value{Type: Array, Array: []Value{
 				{Type: Bulk, Bulk: "REPLCONF"},
 				{Type: Bulk, Bulk: "ACK"},
-				{Type: Bulk, Bulk: fmt.Sprintf("%v", offsetToSend)},
+				{Type: Bulk, Bulk: fmt.Sprintf("%v", s.offset)},
 			}}
 			err := value.Write(writer)
 			if err != nil {
 				fmt.Println("Failed to write", err)
 			}
-
-			s.offset = len([]byte(value.Format()))
 
 		} else {
 			value := Value{Type: SimpleString, SimpleString: "OK"}
