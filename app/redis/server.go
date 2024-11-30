@@ -181,7 +181,7 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 
 	cmd := NewCommand(value)
 
-	s.logger.Printf("Handling command: %q | type: %s | len: %v\n", cmd.value.Format(), cmd.Type, cmdLen)
+	s.logger.Printf("Handling command: %q | type: %s | len: %v | offset: %v\n", cmd.value.Format(), cmd.Type, cmdLen, s.offset)
 
 	switch cmd.Type {
 	case ReplConf:
