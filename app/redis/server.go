@@ -176,10 +176,8 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 		log.Fatalf("failed to handle connection: %v", err)
 	}
 
-	cmdLen := len([]byte(value.Format()))
-	s.offset = s.offset + cmdLen
-
 	cmd := NewCommand(value)
+	cmdLen := len([]byte(value.Format()))
 
 	s.logger.Printf("Handling command: %q | type: %s | len: %v | offset: %v\n", cmd.value.Format(), cmd.Type, cmdLen, s.offset)
 
@@ -203,11 +201,13 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 			}
 
 		} else {
+
 			value := Value{Type: SimpleString, SimpleString: "OK"}
 			err := value.Write(writer)
 			if err != nil {
 				fmt.Println("Failed to write", err)
 			}
+
 		}
 
 	case Info:
@@ -217,6 +217,7 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 		if err != nil {
 			fmt.Println("Failed to write", err)
 		}
+
 	case PSync:
 		data := fmt.Sprintf("FULLRESYNC %s %s", "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb", "0")
 		resyncValue := Value{
@@ -258,6 +259,8 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 		}
 
 		if s.role() == "slave" {
+			s.offset = cmdLen + s.offset
+
 			s.logger.Println("Skipping the response")
 			return
 		}
@@ -337,7 +340,6 @@ func (s *Server) masterHandshake(resp *Resp, writer io.Writer) error {
 	}
 
 	{
-
 		outValue := Value{Type: Array, Array: []Value{
 			{Type: Bulk, Bulk: "PSYNC"},
 			{Type: Bulk, Bulk: "?"},
