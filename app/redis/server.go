@@ -18,6 +18,13 @@ const (
 	protocol = "tcp"
 )
 
+type role string
+
+const (
+	slave  role = "slave"
+	master role = "master"
+)
+
 type Server struct {
 	Host string
 	Port string
@@ -74,7 +81,7 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 	}
 	go s.serveLoop(ctx, listener)
 
-	if s.role() == "slave" {
+	if s.role() == slave {
 		connection, err := s.connect(ctx, s.MasterAddress())
 		if err != nil {
 			return fmt.Errorf("failed to establish master handshake: %w", err)
@@ -277,11 +284,9 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 			s.logger.Fatalf("failed to respond to client command: %v", err)
 		}
 
-		if s.role() == "master" {
-			err := s.replicate(cmd)
-			if err != nil {
-				s.logger.Println("Failed to replicate", err)
-			}
+		err = s.replicate(cmd)
+		if err != nil {
+			s.logger.Println("Failed to replicate", err)
 		}
 	}
 }
@@ -402,18 +407,22 @@ func (s *Server) masterHandshake(resp *Resp, writer io.Writer) error {
 	return nil
 }
 
-func (s *Server) role() string {
+func (s *Server) role() role {
 	if s.MasterHost == "" || s.MasterPort == "" {
-		return "master"
+		return master
 	}
 
-	return "slave"
+	return slave
 }
 
 func (s *Server) replicate(cmd Command) error {
+	if s.role() == slave {
+		return nil
+	}
+
 	switch cmd.Type {
 	case Set:
-		fmt.Printf("Replicating %v command\n", cmd)
+		fmt.Printf("Replicating: %q\n", cmd.value.Format())
 		for _, replica := range s.slaves {
 			err := cmd.Write(replica)
 			if err != nil {
