@@ -204,7 +204,7 @@ func FormatNullBulkString() string {
 }
 
 func FormatNumber(input int) string {
-	return fmt.Sprintf(":%v", input)
+	return fmt.Sprintf(":%v\r\n", input)
 }
 
 func FormatArray(elements ...string) string {
