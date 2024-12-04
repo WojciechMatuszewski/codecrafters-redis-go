@@ -190,7 +190,7 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 
 	switch cmd.Type {
 	case Wait:
-		value := Value{Type: Number, Number: 0}
+		value := Value{Type: Number, Number: len(s.slaves)}
 		err := value.Write(writer)
 		if err != nil {
 			fmt.Println("Failed to write", err)
