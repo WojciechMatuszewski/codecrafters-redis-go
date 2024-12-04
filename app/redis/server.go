@@ -189,6 +189,8 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 
 	s.logger.Printf("Handling command: %q | type: %s | len: %v | offset: %v\n", cmd.value.Format(), cmd.Type, cmdLen, s.offset)
 
+	ackChan := make(chan bool)
+
 	switch cmd.Type {
 	case Wait:
 		ackReplicas, err := strconv.Atoi(cmd.Args[0])
@@ -210,7 +212,6 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 		} else {
 			acks := 0
 			timer := time.After(time.Duration(acksTimeoutMs * int(time.Millisecond)))
-			ackChan := make(chan bool)
 
 			for _, slave := range s.slaves {
 				go func(w io.Writer) {
@@ -265,6 +266,7 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 		switch cmd.Args[0] {
 		case "ACK":
 			s.logger.Printf("Received ACK: %v", cmd.Args[1])
+			ackChan <- true
 		case "GETACK":
 			s.logger.Printf("GETACK. Current offset: %v\n", s.offset)
 
