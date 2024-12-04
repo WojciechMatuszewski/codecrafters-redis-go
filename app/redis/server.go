@@ -41,6 +41,8 @@ type Server struct {
 	offset int
 }
 
+var ackChan = make(chan bool)
+
 func NewServer(client *Client, host string, masterHost string, port string, masterPort string) *Server {
 	server := &Server{
 		Host:       host,
@@ -188,8 +190,6 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 	cmdLen := len([]byte(value.Format()))
 
 	s.logger.Printf("Handling command: %q | type: %s | len: %v | offset: %v\n", cmd.value.Format(), cmd.Type, cmdLen, s.offset)
-
-	ackChan := make(chan bool)
 
 	switch cmd.Type {
 	case Wait:
