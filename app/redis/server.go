@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"strconv"
 	"syscall"
+	"time"
 )
 
 const (
@@ -190,18 +191,81 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 
 	switch cmd.Type {
 	case Wait:
-		value := Value{Type: Number, Number: len(s.slaves)}
-		err := value.Write(writer)
+		ackReplicas, err := strconv.Atoi(cmd.Args[0])
 		if err != nil {
-			fmt.Println("Failed to write", err)
+			s.logger.Fatalf("Failed to parse args for: %q\n", cmd.value.Format())
+		}
+
+		acksTimeoutMs, err := strconv.Atoi(cmd.Args[1])
+		if err != nil {
+			s.logger.Fatalf("Failed to parse args for: %q\n", cmd.value.Format())
+		}
+
+		if len(s.slaves) == 0 {
+			value := Value{Type: Number, Number: len(s.slaves)}
+			err := value.Write(writer)
+			if err != nil {
+				fmt.Println("Failed to write", err)
+			}
+		} else {
+			acks := 0
+			timer := time.After(time.Duration(acksTimeoutMs * int(time.Millisecond)))
+			ackChan := make(chan bool)
+
+			for _, slave := range s.slaves {
+				go func(w io.Writer) {
+					value := Value{Type: Array, Array: []Value{
+						{Type: Bulk, Bulk: "REPLCONF"},
+						{Type: Bulk, Bulk: "GETACK"},
+						{Type: Bulk, Bulk: "*"},
+					}}
+					err := value.Write(w)
+					if err != nil {
+						s.logger.Printf("Failed to write: %q to replica \n", value.Format())
+					}
+
+					ackChan <- true
+				}(slave)
+			}
+
+			for {
+				select {
+				case <-ackChan:
+					s.logger.Println("Got ACK in wait")
+
+					acks = acks + 1
+					if acks >= ackReplicas {
+						s.logger.Println("Got enough ACKs in WAIT")
+
+						value := Value{Type: Number, Number: acks}
+						err := value.Write(writer)
+						if err != nil {
+							fmt.Println("Failed to write", err)
+						}
+						return
+					}
+				case <-timer:
+					s.logger.Println("Timeout in WAIT")
+
+					value := Value{Type: Number, Number: acks}
+					err := value.Write(writer)
+					if err != nil {
+						fmt.Println("Failed to write", err)
+					}
+					return
+				}
+			}
+
 		}
 
 	case ReplConf:
 		if cmd.Args[0] == "listening-port" {
 			s.slaves = append(s.slaves, writer)
 		}
-
-		if cmd.Args[0] == "GETACK" {
+		switch cmd.Args[0] {
+		case "ACK":
+			s.logger.Printf("Received ACK: %v", cmd.Args[1])
+		case "GETACK":
 			s.logger.Printf("GETACK. Current offset: %v\n", s.offset)
 
 			value := Value{Type: Array, Array: []Value{
@@ -216,8 +280,7 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 
 			s.offset = s.offset + cmdLen
 
-		} else {
-
+		default:
 			value := Value{Type: SimpleString, SimpleString: "OK"}
 			err := value.Write(writer)
 			if err != nil {
