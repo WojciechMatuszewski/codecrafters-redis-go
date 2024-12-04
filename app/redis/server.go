@@ -232,7 +232,7 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 				select {
 				case <-ackChan:
 					acks = acks + 1
-					s.logger.Println("Got ACK in wait", acks)
+					s.logger.Printf("Got ACK in wait: %v\n", acks)
 
 					if acks >= ackReplicas {
 						s.logger.Println("Got enough ACKs in WAIT")
