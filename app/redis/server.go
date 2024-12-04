@@ -231,9 +231,9 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 			for {
 				select {
 				case <-ackChan:
-					s.logger.Println("Got ACK in wait")
-
 					acks = acks + 1
+					s.logger.Println("Got ACK in wait", acks)
+
 					if acks >= ackReplicas {
 						s.logger.Println("Got enough ACKs in WAIT")
 
