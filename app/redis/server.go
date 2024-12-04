@@ -189,6 +189,13 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 	s.logger.Printf("Handling command: %q | type: %s | len: %v | offset: %v\n", cmd.value.Format(), cmd.Type, cmdLen, s.offset)
 
 	switch cmd.Type {
+	case Wait:
+		value := Value{Type: Number, Number: 0}
+		err := value.Write(writer)
+		if err != nil {
+			fmt.Println("Failed to write", err)
+		}
+
 	case ReplConf:
 		if cmd.Args[0] == "listening-port" {
 			s.slaves = append(s.slaves, writer)

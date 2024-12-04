@@ -19,6 +19,7 @@ const (
 	PSync      CommandType = "psync"
 	Fullresync CommandType = "fullresync"
 	Ok         CommandType = "ok"
+	Wait       CommandType = "wait"
 )
 
 type Command struct {

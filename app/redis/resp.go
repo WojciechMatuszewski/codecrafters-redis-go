@@ -26,6 +26,7 @@ const (
 	Array        ValueType = "array"
 	SimpleString ValueType = "string"
 	Raw          ValueType = "raw"
+	Number       ValueType = "number"
 )
 
 type Value struct {
@@ -43,6 +44,8 @@ func (v Value) Format() string {
 		return FormatBulkString(v.Bulk)
 	case NullBulk:
 		return FormatNullBulkString()
+	case Number:
+		return FormatNumber(v.Number)
 	case Array:
 		elements := make([]string, len(v.Array))
 		for i := 0; i < len(v.Array); i++ {
@@ -198,6 +201,10 @@ func FormatSimpleString(input string) string {
 
 func FormatNullBulkString() string {
 	return "$-1\r\n"
+}
+
+func FormatNumber(input int) string {
+	return fmt.Sprintf(":%v", input)
 }
 
 func FormatArray(elements ...string) string {
