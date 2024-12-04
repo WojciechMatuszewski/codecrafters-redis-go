@@ -225,7 +225,6 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 						s.logger.Printf("Failed to write: %q to replica \n", value.Format())
 					}
 
-					ackChan <- true
 				}(slave)
 			}
 
