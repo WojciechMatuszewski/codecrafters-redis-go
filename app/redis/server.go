@@ -242,7 +242,6 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 						if err != nil {
 							fmt.Println("Failed to write", err)
 						}
-						return
 					}
 				case <-timer:
 					s.logger.Println("Timeout in WAIT")
@@ -252,7 +251,6 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 					if err != nil {
 						fmt.Println("Failed to write", err)
 					}
-					return
 				}
 			}
 
