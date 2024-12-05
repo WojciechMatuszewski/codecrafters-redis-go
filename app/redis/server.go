@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -213,8 +215,10 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 			acks := 0
 			timer := time.After(time.Duration(acksTimeoutMs * int(time.Millisecond)))
 
+			var g errgroup.Group
 			for _, slave := range s.slaves {
-				go func(w io.Writer) {
+				slave := slave // capture range variable
+				g.Go(func() error {
 					s.logger.Println("Sending ACK to replica")
 
 					value := Value{Type: Array, Array: []Value{
@@ -223,12 +227,19 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 						{Type: Bulk, Bulk: "*"},
 					}}
 
-					err := value.Write(w)
+					err := value.Write(slave)
 					if err != nil {
 						s.logger.Printf("Failed to write: %q to replica \n", value.Format())
+						return err
 					}
+					return nil
+				})
+			}
 
-				}(slave)
+			err := g.Wait()
+			if err != nil {
+				s.logger.Printf("Failed to send all ACKs requests to replicas: %v", err)
+				return
 			}
 
 			for {
