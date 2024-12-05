@@ -233,6 +233,15 @@ func (s *Server) handle(resp *Resp, writer net.Conn) {
 						return err
 					}
 
+					s.logger.Printf("Wrote to replica: %s\n", slave.RemoteAddr())
+
+					_, err = slave.Read([]byte{})
+					if err != nil {
+						s.logger.Println("Read from replica error")
+					}
+
+					s.logger.Printf("Read from replica: %s\n", slave.RemoteAddr())
+
 					return nil
 				})
 			}
