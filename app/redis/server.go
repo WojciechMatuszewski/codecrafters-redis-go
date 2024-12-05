@@ -36,7 +36,7 @@ type Server struct {
 	MasterPort string
 
 	client *Client
-	slaves []io.Writer
+	slaves []net.Conn
 
 	logger *log.Logger
 
@@ -53,7 +53,7 @@ func NewServer(client *Client, host string, masterHost string, port string, mast
 		MasterPort: masterPort,
 
 		client: client,
-		slaves: []io.Writer{},
+		slaves: []net.Conn{},
 		offset: 0,
 	}
 	logger := log.New(os.Stdout, fmt.Sprintf("[%s on %s:%s] ", server.role(), server.Host, server.Port), 0)
@@ -178,7 +178,7 @@ func (s *Server) handleLoop(ctx context.Context, resp *Resp, connection net.Conn
 	}
 }
 
-func (s *Server) handle(resp *Resp, writer io.Writer) {
+func (s *Server) handle(resp *Resp, writer net.Conn) {
 	value, err := resp.Read()
 	if err != nil {
 		if errors.Is(err, io.EOF) {
@@ -217,9 +217,9 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 
 			var g errgroup.Group
 			for _, slave := range s.slaves {
-				slave := slave // capture range variable
+				slave := slave
 				g.Go(func() error {
-					s.logger.Println("Sending ACK to replica")
+					s.logger.Printf("Sending ACK to replica: %s\n", slave.RemoteAddr())
 
 					value := Value{Type: Array, Array: []Value{
 						{Type: Bulk, Bulk: "REPLCONF"},
@@ -232,6 +232,7 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 						s.logger.Printf("Failed to write: %q to replica \n", value.Format())
 						return err
 					}
+
 					return nil
 				})
 			}
@@ -279,6 +280,7 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 		if cmd.Args[0] == "listening-port" {
 			s.slaves = append(s.slaves, writer)
 		}
+
 		switch cmd.Args[0] {
 		case "ACK":
 			s.logger.Printf("Received ACK: %v", cmd.Args[1])
