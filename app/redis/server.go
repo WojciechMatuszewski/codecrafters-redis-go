@@ -41,8 +41,6 @@ type Server struct {
 	offset int
 }
 
-var ackChan = make(chan bool)
-
 func NewServer(client *Client, host string, masterHost string, port string, masterPort string) *Server {
 	server := &Server{
 		Host:       host,
@@ -101,7 +99,8 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 
 		s.logger.Println("Finished master handshake")
 
-		go s.handleLoop(ctx, resp, connection)
+		ackChan := make(chan bool)
+		go s.handleLoop(ctx, resp, connection, ackChan)
 	}
 
 	<-ctx.Done()
@@ -157,12 +156,13 @@ func (s *Server) serveLoop(ctx context.Context, listener net.Listener) {
 			s.logger.Printf("New connection to the server: %s\n", connection.RemoteAddr())
 
 			resp := NewResp(connection)
-			go s.handleLoop(ctx, resp, connection)
+			ackChan := make(chan bool)
+			go s.handleLoop(ctx, resp, connection, ackChan)
 		}
 	}
 }
 
-func (s *Server) handleLoop(ctx context.Context, resp *Resp, connection net.Conn) {
+func (s *Server) handleLoop(ctx context.Context, resp *Resp, connection net.Conn, ackChan chan bool) {
 	defer connection.Close()
 
 	s.logger.Println("Initializing the handle loop")
@@ -171,12 +171,12 @@ func (s *Server) handleLoop(ctx context.Context, resp *Resp, connection net.Conn
 		case <-ctx.Done():
 			return
 		default:
-			s.handle(resp, connection)
+			s.handle(resp, connection, ackChan)
 		}
 	}
 }
 
-func (s *Server) handle(resp *Resp, writer io.Writer) {
+func (s *Server) handle(resp *Resp, writer io.Writer, ackChan chan bool) {
 	value, err := resp.Read()
 	if err != nil {
 		if errors.Is(err, io.EOF) {
@@ -242,6 +242,7 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 						if err != nil {
 							fmt.Println("Failed to write", err)
 						}
+
 					}
 				case <-timer:
 					s.logger.Println("Timeout in WAIT")
