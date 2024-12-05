@@ -41,6 +41,16 @@ type Server struct {
 	offset int
 }
 
+type srvConnection struct {
+	connection net.Conn
+	ackChan    chan bool
+	acks       int
+}
+
+func newSrvConnection(connection net.Conn) *srvConnection {
+	return &srvConnection{ackChan: make(chan bool), acks: 0, connection: connection}
+}
+
 func NewServer(client *Client, host string, masterHost string, port string, masterPort string) *Server {
 	server := &Server{
 		Host:       host,
@@ -99,8 +109,8 @@ func (s *Server) ListenAndServe(ctx context.Context) error {
 
 		s.logger.Println("Finished master handshake")
 
-		ackChan := make(chan bool)
-		go s.handleLoop(ctx, resp, connection, ackChan)
+		srvConn := newSrvConnection(connection)
+		go s.handleLoop(ctx, resp, srvConn)
 	}
 
 	<-ctx.Done()
@@ -156,14 +166,15 @@ func (s *Server) serveLoop(ctx context.Context, listener net.Listener) {
 			s.logger.Printf("New connection to the server: %s\n", connection.RemoteAddr())
 
 			resp := NewResp(connection)
-			ackChan := make(chan bool)
-			go s.handleLoop(ctx, resp, connection, ackChan)
+			srvConnection := newSrvConnection(connection)
+
+			go s.handleLoop(ctx, resp, srvConnection)
 		}
 	}
 }
 
-func (s *Server) handleLoop(ctx context.Context, resp *Resp, connection net.Conn, ackChan chan bool) {
-	defer connection.Close()
+func (s *Server) handleLoop(ctx context.Context, resp *Resp, srvConn *srvConnection) {
+	defer srvConn.connection.Close()
 
 	s.logger.Println("Initializing the handle loop")
 	for {
@@ -171,12 +182,12 @@ func (s *Server) handleLoop(ctx context.Context, resp *Resp, connection net.Conn
 		case <-ctx.Done():
 			return
 		default:
-			s.handle(resp, connection, ackChan)
+			s.handle(resp, srvConn)
 		}
 	}
 }
 
-func (s *Server) handle(resp *Resp, writer io.Writer, ackChan chan bool) {
+func (s *Server) handle(resp *Resp, srvConn *srvConnection) {
 	value, err := resp.Read()
 	if err != nil {
 		if errors.Is(err, io.EOF) {
@@ -205,12 +216,11 @@ func (s *Server) handle(resp *Resp, writer io.Writer, ackChan chan bool) {
 
 		if len(s.slaves) == 0 {
 			value := Value{Type: Number, Number: len(s.slaves)}
-			err := value.Write(writer)
+			err := value.Write(srvConn.connection)
 			if err != nil {
 				fmt.Println("Failed to write", err)
 			}
 		} else {
-			acks := 0
 			timer := time.After(time.Duration(acksTimeoutMs * int(time.Millisecond)))
 
 			for _, slave := range s.slaves {
@@ -230,15 +240,15 @@ func (s *Server) handle(resp *Resp, writer io.Writer, ackChan chan bool) {
 
 			for {
 				select {
-				case <-ackChan:
-					acks = acks + 1
-					s.logger.Printf("Got ACK in wait: %v\n", acks)
+				case <-srvConn.ackChan:
+					srvConn.acks = srvConn.acks + 1
+					s.logger.Printf("Got ACK in wait: %v\n", srvConn.acks)
 
-					if acks >= ackReplicas {
+					if srvConn.acks >= ackReplicas {
 						s.logger.Println("Got enough ACKs in WAIT")
 
-						value := Value{Type: Number, Number: acks}
-						err := value.Write(writer)
+						value := Value{Type: Number, Number: srvConn.acks}
+						err := value.Write(srvConn.connection)
 						if err != nil {
 							fmt.Println("Failed to write", err)
 						}
@@ -247,8 +257,8 @@ func (s *Server) handle(resp *Resp, writer io.Writer, ackChan chan bool) {
 				case <-timer:
 					s.logger.Println("Timeout in WAIT")
 
-					value := Value{Type: Number, Number: acks}
-					err := value.Write(writer)
+					value := Value{Type: Number, Number: srvConn.acks}
+					err := value.Write(srvConn.connection)
 					if err != nil {
 						fmt.Println("Failed to write", err)
 					}
@@ -259,12 +269,12 @@ func (s *Server) handle(resp *Resp, writer io.Writer, ackChan chan bool) {
 
 	case ReplConf:
 		if cmd.Args[0] == "listening-port" {
-			s.slaves = append(s.slaves, writer)
+			s.slaves = append(s.slaves, srvConn.connection)
 		}
 		switch cmd.Args[0] {
 		case "ACK":
 			s.logger.Printf("Received ACK: %v", cmd.Args[1])
-			ackChan <- true
+			srvConn.ackChan <- true
 		case "GETACK":
 			s.logger.Printf("GETACK. Current offset: %v\n", s.offset)
 
@@ -273,7 +283,7 @@ func (s *Server) handle(resp *Resp, writer io.Writer, ackChan chan bool) {
 				{Type: Bulk, Bulk: "ACK"},
 				{Type: Bulk, Bulk: fmt.Sprintf("%v", s.offset)},
 			}}
-			err := value.Write(writer)
+			err := value.Write(srvConn.connection)
 			if err != nil {
 				fmt.Println("Failed to write", err)
 			}
@@ -282,7 +292,7 @@ func (s *Server) handle(resp *Resp, writer io.Writer, ackChan chan bool) {
 
 		default:
 			value := Value{Type: SimpleString, SimpleString: "OK"}
-			err := value.Write(writer)
+			err := value.Write(srvConn.connection)
 			if err != nil {
 				fmt.Println("Failed to write", err)
 			}
@@ -292,7 +302,7 @@ func (s *Server) handle(resp *Resp, writer io.Writer, ackChan chan bool) {
 	case Info:
 		info := fmt.Sprintf("role:%s\nmaster_replid:%s\nmaster_repl_offset:%s", s.role(), "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb", "0")
 		value := Value{Type: Bulk, Bulk: info}
-		err := value.Write(writer)
+		err := value.Write(srvConn.connection)
 		if err != nil {
 			fmt.Println("Failed to write", err)
 		}
@@ -303,7 +313,7 @@ func (s *Server) handle(resp *Resp, writer io.Writer, ackChan chan bool) {
 			Type:         SimpleString,
 			SimpleString: data,
 		}
-		err := resyncValue.Write(writer)
+		err := resyncValue.Write(srvConn.connection)
 		if err != nil {
 			s.logger.Println("Failed to write", err)
 		}
@@ -314,7 +324,7 @@ func (s *Server) handle(resp *Resp, writer io.Writer, ackChan chan bool) {
 			return
 		}
 		rdbValue := Value{Type: Raw, Raw: fmt.Sprintf("$%v\r\n%s", len(rdbData), rdbData)}
-		err = rdbValue.Write(writer)
+		err = rdbValue.Write(srvConn.connection)
 		if err != nil {
 			s.logger.Println("Failed to write", err)
 		}
@@ -334,7 +344,7 @@ func (s *Server) handle(resp *Resp, writer io.Writer, ackChan chan bool) {
 			s.offset = cmdLen + s.offset
 
 			if cmd.Type == Get {
-				_, err = writer.Write([]byte(outValue.Format()))
+				_, err = srvConn.connection.Write([]byte(outValue.Format()))
 				if err != nil {
 					s.logger.Fatalf("failed to respond to client command: %v", err)
 				}
@@ -349,7 +359,7 @@ func (s *Server) handle(resp *Resp, writer io.Writer, ackChan chan bool) {
 
 		s.logger.Printf("Responding with: %q\n", outValue.Format())
 
-		_, err = writer.Write([]byte(outValue.Format()))
+		_, err = srvConn.connection.Write([]byte(outValue.Format()))
 		if err != nil {
 			s.logger.Fatalf("failed to respond to client command: %v", err)
 		}
