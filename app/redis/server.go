@@ -215,11 +215,14 @@ func (s *Server) handle(resp *Resp, writer io.Writer) {
 
 			for _, slave := range s.slaves {
 				go func(w io.Writer) {
+					s.logger.Println("Sending ACK to replica")
+
 					value := Value{Type: Array, Array: []Value{
 						{Type: Bulk, Bulk: "REPLCONF"},
 						{Type: Bulk, Bulk: "GETACK"},
 						{Type: Bulk, Bulk: "*"},
 					}}
+
 					err := value.Write(w)
 					if err != nil {
 						s.logger.Printf("Failed to write: %q to replica \n", value.Format())
