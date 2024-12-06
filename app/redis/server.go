@@ -240,6 +240,8 @@ func (s *Server) handle(resp *Resp, writer net.Conn) {
 			acks := 0
 
 			timer := time.After(time.Duration(acksTimeoutMs * int(time.Millisecond)))
+			s.logger.Printf("WAIT: %v ms\n", acksTimeoutMs*int(time.Millisecond))
+
 			for {
 				select {
 				case <-ackChan:
