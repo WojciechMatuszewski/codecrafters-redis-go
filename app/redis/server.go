@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -35,8 +36,8 @@ type Server struct {
 	MasterHost string
 	MasterPort string
 
-	client *Client
-	slaves []net.Conn
+	client   *Client
+	replicas []net.Conn
 
 	logger *log.Logger
 
@@ -52,9 +53,9 @@ func NewServer(client *Client, host string, masterHost string, port string, mast
 		MasterHost: masterHost,
 		MasterPort: masterPort,
 
-		client: client,
-		slaves: []net.Conn{},
-		offset: 0,
+		client:   client,
+		replicas: []net.Conn{},
+		offset:   0,
 	}
 	logger := log.New(os.Stdout, fmt.Sprintf("[%s on %s:%s] ", server.role(), server.Host, server.Port), 0)
 	server.logger = logger
@@ -205,21 +206,19 @@ func (s *Server) handle(resp *Resp, writer net.Conn) {
 			s.logger.Fatalf("Failed to parse args for: %q\n", cmd.value.Format())
 		}
 
-		if len(s.slaves) == 0 {
-			value := Value{Type: Number, Number: len(s.slaves)}
+		if len(s.replicas) == 0 {
+			value := Value{Type: Number, Number: len(s.replicas)}
 			err := value.Write(writer)
 			if err != nil {
 				fmt.Println("Failed to write", err)
 			}
 		} else {
-			acks := 0
-			timer := time.After(time.Duration(acksTimeoutMs * int(time.Millisecond)))
 
-			var g errgroup.Group
-			for _, slave := range s.slaves {
-				slave := slave
-				g.Go(func() error {
-					s.logger.Printf("Sending ACK to replica: %s\n", slave.RemoteAddr())
+			var eg errgroup.Group
+			for _, replica := range s.replicas {
+				replica := replica
+				eg.Go(func() error {
+					s.logger.Printf("Sending ACK to replica: %s\n", replica.RemoteAddr())
 
 					value := Value{Type: Array, Array: []Value{
 						{Type: Bulk, Bulk: "REPLCONF"},
@@ -227,36 +226,27 @@ func (s *Server) handle(resp *Resp, writer net.Conn) {
 						{Type: Bulk, Bulk: "*"},
 					}}
 
-					err := value.Write(slave)
+					err := value.Write(replica)
 					if err != nil {
 						s.logger.Printf("Failed to write: %q to replica \n", value.Format())
 						return err
 					}
 
-					s.logger.Printf("Wrote to replica: %s\n", slave.RemoteAddr())
-
-					_, err = slave.Read([]byte{})
-					if err != nil {
-						s.logger.Println("Read from replica error")
-					}
-
-					s.logger.Printf("Read from replica: %s\n", slave.RemoteAddr())
-
 					return nil
 				})
 			}
 
-			err := g.Wait()
-			if err != nil {
-				s.logger.Printf("Failed to send all ACKs requests to replicas: %v", err)
-				return
-			}
+			var ackMutex sync.Mutex
+			acks := 0
 
+			timer := time.After(time.Duration(acksTimeoutMs * int(time.Millisecond)))
 			for {
 				select {
 				case <-ackChan:
+					ackMutex.Lock()
 					acks = acks + 1
 					s.logger.Printf("Got ACK in wait: %v\n", acks)
+					ackMutex.Unlock()
 
 					if acks >= ackReplicas {
 						s.logger.Println("Got enough ACKs in WAIT")
@@ -271,9 +261,11 @@ func (s *Server) handle(resp *Resp, writer net.Conn) {
 
 					}
 				case <-timer:
-					s.logger.Println("Timeout in WAIT")
-
+					ackMutex.Lock()
+					s.logger.Printf("Timeout in WAIT with ACKs: %v\n", acks)
 					value := Value{Type: Number, Number: acks}
+					ackMutex.Unlock()
+
 					err := value.Write(writer)
 					if err != nil {
 						fmt.Println("Failed to write", err)
@@ -287,7 +279,7 @@ func (s *Server) handle(resp *Resp, writer net.Conn) {
 
 	case ReplConf:
 		if cmd.Args[0] == "listening-port" {
-			s.slaves = append(s.slaves, writer)
+			s.replicas = append(s.replicas, writer)
 		}
 
 		switch cmd.Args[0] {
@@ -522,7 +514,7 @@ func (s *Server) replicate(cmd Command) error {
 	switch cmd.Type {
 	case Set:
 		fmt.Printf("Replicating: %q\n", cmd.value.Format())
-		for _, replica := range s.slaves {
+		for _, replica := range s.replicas {
 			err := cmd.Write(replica)
 			if err != nil {
 				return err
