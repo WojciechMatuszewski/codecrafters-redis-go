@@ -37,11 +37,16 @@ type Server struct {
 	MasterPort string
 
 	client   *Client
-	replicas []net.Conn
+	replicas []replica
 
 	logger *log.Logger
 
 	offset int
+}
+
+type replica struct {
+	connection net.Conn
+	offset     int
 }
 
 var ackChan = make(chan bool)
@@ -54,7 +59,7 @@ func NewServer(client *Client, host string, masterHost string, port string, mast
 		MasterPort: masterPort,
 
 		client:   client,
-		replicas: []net.Conn{},
+		replicas: []replica{},
 		offset:   0,
 	}
 	logger := log.New(os.Stdout, fmt.Sprintf("[%s on %s:%s] ", server.role(), server.Host, server.Port), 0)
@@ -213,30 +218,36 @@ func (s *Server) handle(resp *Resp, writer net.Conn) {
 				fmt.Println("Failed to write", err)
 			}
 		} else {
+			var ackMutex sync.Mutex
+			acks := 0
+
 			var eg errgroup.Group
 			for _, replica := range s.replicas {
 				replica := replica
-				eg.Go(func() error {
-					s.logger.Printf("Sending ACK to replica: %s\n", replica.RemoteAddr())
 
-					value := Value{Type: Array, Array: []Value{
-						{Type: Bulk, Bulk: "REPLCONF"},
-						{Type: Bulk, Bulk: "GETACK"},
-						{Type: Bulk, Bulk: "*"},
-					}}
+				if replica.offset <= 0 {
+					acks += 1
+				} else {
+					eg.Go(func() error {
+						s.logger.Printf("Sending ACK to replica: %s\n", replica.connection.RemoteAddr())
 
-					err := value.Write(replica)
-					if err != nil {
-						s.logger.Printf("Failed to write: %q to replica \n", value.Format())
-						return err
-					}
+						value := Value{Type: Array, Array: []Value{
+							{Type: Bulk, Bulk: "REPLCONF"},
+							{Type: Bulk, Bulk: "GETACK"},
+							{Type: Bulk, Bulk: "*"},
+						}}
 
-					return nil
-				})
+						err := value.Write(replica.connection)
+						if err != nil {
+							s.logger.Printf("Failed to write: %q to replica \n", value.Format())
+							return err
+						}
+
+						return nil
+					})
+				}
+
 			}
-
-			var ackMutex sync.Mutex
-			acks := 0
 
 			timer := time.After(time.Duration(acksTimeoutMs * int(time.Millisecond)))
 			s.logger.Printf("WAIT: %v ms\n", acksTimeoutMs*int(time.Millisecond))
@@ -265,7 +276,7 @@ func (s *Server) handle(resp *Resp, writer net.Conn) {
 
 	case ReplConf:
 		if cmd.Args[0] == "listening-port" {
-			s.replicas = append(s.replicas, writer)
+			s.replicas = append(s.replicas, replica{connection: writer, offset: 0})
 		}
 
 		switch cmd.Args[0] {
@@ -500,11 +511,13 @@ func (s *Server) replicate(cmd Command) error {
 	switch cmd.Type {
 	case Set:
 		fmt.Printf("Replicating: %q\n", cmd.value.Format())
-		for _, replica := range s.replicas {
-			err := cmd.Write(replica)
+		for i := 0; i < len(s.replicas); i++ {
+			err := cmd.Write(s.replicas[i].connection)
 			if err != nil {
 				return err
 			}
+
+			s.replicas[i].offset += len([]byte(cmd.value.Format()))
 		}
 
 		return nil
