@@ -213,7 +213,6 @@ func (s *Server) handle(resp *Resp, writer net.Conn) {
 				fmt.Println("Failed to write", err)
 			}
 		} else {
-
 			var eg errgroup.Group
 			for _, replica := range s.replicas {
 				replica := replica
@@ -239,44 +238,27 @@ func (s *Server) handle(resp *Resp, writer net.Conn) {
 			var ackMutex sync.Mutex
 			acks := 0
 
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
+			timer := time.After(time.Duration(acksTimeoutMs * int(time.Millisecond)))
+			s.logger.Printf("WAIT: %v ms\n", acksTimeoutMs*int(time.Millisecond))
 
-			timer := time.AfterFunc(time.Duration(acksTimeoutMs)*time.Millisecond, func() {
-				ackMutex.Lock()
-				s.logger.Printf("Timeout in WAIT with ACKs: %v\n", acks)
-				value := Value{Type: Number, Number: acks}
-				ackMutex.Unlock()
-
-				err := value.Write(writer)
-				if err != nil {
-					fmt.Println("Failed to write", err)
-				}
-			})
-
-			for {
+		loop:
+			for acks < ackReplicas {
 				select {
 				case <-ackChan:
 					ackMutex.Lock()
 					acks = acks + 1
 					s.logger.Printf("Got ACK in WAIT: %v\n", acks)
 					ackMutex.Unlock()
-
-					if acks >= ackReplicas {
-						s.logger.Println("Got enough ACKs in WAIT")
-						timer.Stop()
-
-						value := Value{Type: Number, Number: acks}
-						err := value.Write(writer)
-						if err != nil {
-							fmt.Println("Failed to write", err)
-						}
-
-						return
-					}
-				case <-ctx.Done():
-					return
+				case <-timer:
+					break loop
 				}
+			}
+
+			s.logger.Printf("Received ACKs: %v\n", acks)
+			value := Value{Type: Number, Number: acks}
+			err := value.Write(writer)
+			if err != nil {
+				fmt.Println("Failed to write", err)
 			}
 
 		}
