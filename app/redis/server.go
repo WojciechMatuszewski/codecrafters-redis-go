@@ -256,9 +256,7 @@ func (s *Server) handle(resp *Resp, writer net.Conn) {
 						if err != nil {
 							fmt.Println("Failed to write", err)
 						}
-
 						return
-
 					}
 				case <-timer:
 					ackMutex.Lock()
@@ -272,8 +270,6 @@ func (s *Server) handle(resp *Resp, writer net.Conn) {
 					}
 
 					return
-				default:
-					s.logger.Printf("default")
 				}
 			}
 
