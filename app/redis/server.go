@@ -239,8 +239,20 @@ func (s *Server) handle(resp *Resp, writer net.Conn) {
 			var ackMutex sync.Mutex
 			acks := 0
 
-			timer := time.After(time.Duration(acksTimeoutMs * int(time.Millisecond)))
-			s.logger.Printf("WAIT: %v ms\n", acksTimeoutMs*int(time.Millisecond))
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			timer := time.AfterFunc(time.Duration(acksTimeoutMs)*time.Millisecond, func() {
+				ackMutex.Lock()
+				s.logger.Printf("Timeout in WAIT with ACKs: %v\n", acks)
+				value := Value{Type: Number, Number: acks}
+				ackMutex.Unlock()
+
+				err := value.Write(writer)
+				if err != nil {
+					fmt.Println("Failed to write", err)
+				}
+			})
 
 			for {
 				select {
@@ -252,25 +264,17 @@ func (s *Server) handle(resp *Resp, writer net.Conn) {
 
 					if acks >= ackReplicas {
 						s.logger.Println("Got enough ACKs in WAIT")
+						timer.Stop()
 
 						value := Value{Type: Number, Number: acks}
 						err := value.Write(writer)
 						if err != nil {
 							fmt.Println("Failed to write", err)
 						}
+
 						return
 					}
-				case <-timer:
-					ackMutex.Lock()
-					s.logger.Printf("Timeout in WAIT with ACKs: %v\n", acks)
-					value := Value{Type: Number, Number: acks}
-					ackMutex.Unlock()
-
-					err := value.Write(writer)
-					if err != nil {
-						fmt.Println("Failed to write", err)
-					}
-
+				case <-ctx.Done():
 					return
 				}
 			}
